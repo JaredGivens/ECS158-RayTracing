@@ -16,13 +16,13 @@ bool ray_color(Intersect &record, Ray const &ray,
   record.dist = kInf;
   Intersect intersect;
   for (auto const &sphere : spheres) {
-    if (ray.intersect(intersect, sphere, 0.01, 100) &&
+    if (ray.intersect(intersect, sphere, 0, kInf) &&
         intersect.dist < record.dist) {
       record = intersect;
     }
   }
   if (record.dist != kInf) {
-    record.color = div(add(intersect.normal, 1), 2);
+    record.color = div(add(record.normal, 1), 2);
     return true;
   }
 
@@ -37,6 +37,7 @@ int32_t main() {
 
   auto spheres = std::vector<Sphere>();
   spheres.push_back(Sphere{vecf_t{0, 0, -1}, 0.5});
+  spheres.push_back(Sphere{vecf_t{0, -100.5, -1}, 100});
 
   // Image
 
