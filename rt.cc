@@ -4,6 +4,35 @@
 #include <vector>
 #include <random>
 
+class Camera {
+    public:
+        Camera() {
+            float aspect_ratio = 16.0 / 9.0;
+            float viewport_height = 2.0;
+            float viewport_width = aspect_ratio * viewport_height;
+            float focal_length = 1.0;
+
+            origin_ = vecf_t{0, 0, 0};
+            hor_ = vecf_t{viewport_width, 0.0, 0.0};
+            vert_ = vecf_t{0.0, viewport_height, 0.0};
+            vecf_t hor = hor_;
+            vecf_t origin = origin_;
+            lower_left_ = sub(origin, add(div(add(hor, vert_), 2), vecf_t{0, 0, focal_length}));
+        }
+
+        Ray get_ray(float u, float v) const {
+          vecf_t hor = hor_;
+          vecf_t vert = vert_;
+            return Ray{origin_, normalize(sub(add(add(mul(hor, u), mul(vert, v)), lower_left_), origin_))};
+        }
+
+    private:
+        vecf_t origin_;
+        vecf_t lower_left_;
+        vecf_t hor_;
+        vecf_t vert_;
+};
+
 void write_color(std::ostream &out, vecf_t pixel_color) {
   // Write the translated [0,255] value of each color component.
   out << int32_t(255.999 * pixel_color.x) << ' '
@@ -54,12 +83,7 @@ int32_t main() {
   vecf_t v0;
   vecf_t v1;
 
-  auto const origin = vecf_t{0, 0, 0};
-  auto const horizontal = vecf_t{viewport_width, 0, 0};
-  auto const vertical = vecf_t{0, viewport_height, 0};
-  auto const lower_left_corner =
-      sub(v1 = origin, add(div(add(v0 = horizontal, vertical), 2),
-                           vecf_t{0, 0, focal_length}));
+  auto cam = Camera();
   float max_depth = 1;
   float samples = 20;
   auto rand_eng = std::default_random_engine();
@@ -76,11 +100,7 @@ int32_t main() {
         auto v = float(j + uni_dist01(rand_eng)) / float(image_height - 1);
         // ray from origin to pixel
 
-        auto r = Ray{
-            origin,
-            normalize(sub(add(add(mul(v0 = horizontal, u), mul(v1 = vertical, v)),
-                              lower_left_corner),
-                          origin))};
+        Ray r = cam.get_ray(u, v);
         int32_t depth = 0;
         Intersect intersect;
         // gradient
