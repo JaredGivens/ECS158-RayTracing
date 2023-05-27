@@ -3,7 +3,6 @@
 #include <vector>
 #include "geo.hh"
 
-
 void write_color(std::ostream &out, vecf_t pixel_color) {
     // Write the translated [0,255] value of each color component.
     out << int32_t(255.999 * pixel_color.x) << ' '
@@ -15,13 +14,13 @@ vecf_t ray_color(Ray const& ray, std::vector<Sphere> const &spheres) {
     Intersect inter;
     for(auto const &sphere : spheres) {
         if(ray.intersect(inter, sphere, 0.01, 100)){
-            return inter.normal;
+            return div(add(inter.normal, 1), 2);
         }
     }
 
-    auto t = ray.dir_.y;
+    auto t = (ray.dir_.y + 1) / 2;
     auto white = vecf_t{1, 1, 1};
-    auto blue = vecf_t{0.2, 0.2, 1};
+    auto blue = vecf_t{0.5, 0.7, 1};
     return add(mul(white, (1.0 - t)), mul(blue, t));
 }
 
