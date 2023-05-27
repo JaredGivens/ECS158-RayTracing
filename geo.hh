@@ -248,6 +248,7 @@ struct Material {
   float metalness;
   float specular;
   float roughness;
+  float alpha;
 };
 
 struct Sphere {

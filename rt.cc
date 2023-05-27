@@ -56,6 +56,14 @@ bool cast_ray(Intersect &record, Ray const &ray,
   return false;
 }
 
+vecf_t refract(vecf_t v, vecf_t n, float refractive_index_ratio) {
+  auto cos_theta = fmin(dot(mul(v, -1), n), 1.0);
+  vecf_t r_out_perp = mul(add(v, mul(n, cos_theta)), refractive_index_ratio);
+  vecf_t r_out_parallel = mul(n,-sqrt(fabs(1.0 - len_sq(r_out_perp))));
+  return add(r_out_perp, r_out_parallel);
+}
+
+
 auto uni_dist01 = std::uniform_real_distribution<float>(0, 1);
 int32_t main() {
 
