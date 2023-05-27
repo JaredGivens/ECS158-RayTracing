@@ -37,7 +37,7 @@ private:
 };
 
 constexpr float kInf = std::numeric_limits<float>::infinity();
-bool ray_color(Intersect &record, Ray const &ray,
+bool cast_ray(Intersect &record, Ray const &ray,
                std::vector<Sphere> const &spheres) {
   record.dist = kInf;
   Intersect intersect;
@@ -49,33 +49,34 @@ bool ray_color(Intersect &record, Ray const &ray,
   }
   if (record.dist != kInf) {
     // record.color = div(add(record.normal, 1), 2);
-    record.color = vecf_t{0, 0, 0};
+    // record.mat.color = vecf_t{0, 0, 0};
     return true;
   }
 
-  auto t = (ray.dir_.y + 1) / 2;
-  auto white = vecf_t{1, 1, 1};
-  auto blue = vecf_t{0.5, 0.7, 1};
-  record.color = add(mul(white, (1.0 - t)), mul(blue, t));
   return false;
-}
-
-vecf_t random_unit_vec(std::default_random_engine rand_eng) {
-  auto static dist_unit =
-      std::uniform_real_distribution<float>(-1 / sqrtf(2), 1 / sqrt(2));
-  // auto static dist_unit =
-  //     std::uniform_real_distribution<float>(-1, 1);
-  auto res = vecf_t{dist_unit(rand_eng), dist_unit(rand_eng), dist_unit(rand_eng)};
-  // technically this normalize can be removed but this is the true
-  return normalize(res);
 }
 
 auto uni_dist01 = std::uniform_real_distribution<float>(0, 1);
 int32_t main() {
 
+  Material yellow_diff = {
+    vecf_t{1,1,.2},
+    0,
+    .5,
+    1,
+  };
+
+  Material blue_metal = {
+    vecf_t{1,1,1},
+    1,
+    .9,
+    0,
+  };
+
   auto spheres = std::vector<Sphere>();
-  spheres.push_back(Sphere{vecf_t{0, 0, -1}, 0.5});
-  spheres.push_back(Sphere{vecf_t{0, -100.5, -1}, 100});
+  spheres.push_back(Sphere{vecf_t{0, 0, -1}, 0.5, yellow_diff});
+  spheres.push_back(Sphere{vecf_t{1, 0, -1}, 0.5, blue_metal});
+  spheres.push_back(Sphere{vecf_t{0, -100.5, -1}, 100, yellow_diff});
 
   // Image
 
@@ -92,7 +93,7 @@ int32_t main() {
 
   auto cam = Camera();
   float max_depth = 20;
-  float samples = 10;
+  float samples = 50;
   auto rand_eng = std::default_random_engine();
 
   // Render
@@ -101,31 +102,52 @@ int32_t main() {
 
   for (int32_t j = image_height - 1; j > -1; --j) {
     for (int32_t i = 0; i < image_width; ++i) {
-      auto color = vecf_t{0, 0, 0};
+      auto pixel_color = vecf_t{0, 0, 0};
       for (int32_t k = 0; k < samples; ++k) {
         auto u = float(i + uni_dist01(rand_eng)) / float(image_width - 1);
         auto v = float(j + uni_dist01(rand_eng)) / float(image_height - 1);
         // ray from origin to pixel
 
-        Ray r = cam.get_ray(u, v);
+        Ray ray = cam.get_ray(u, v);
         int32_t depth = 0;
+        auto ray_color = vecf_t{1, 1, 1};
         Intersect intersect;
         // gradient
-        while (ray_color(intersect, r, spheres) && depth < max_depth) {
-          r.origin_ = intersect.pos;
-          r.dir_ = normalize(add(intersect.normal, random_unit_vec(rand_eng)));
+        while (cast_ray(intersect, ray, spheres) && depth < max_depth) {
+          ray.origin_ = intersect.pos;
+
+          // metalness reflection
+          normalize(lerp(reflect(ray.dir_, intersect.normal), intersect.normal, 1-intersect.mat.metalness));
+
+          // roughness fuzzing
+          auto static dist_unit =
+              std::uniform_real_distribution<float>(-1 / sqrtf(2), 1 / sqrt(2));
+          // auto static dist_unit =
+          //     std::uniform_real_distribution<float>(-1, 1);
+          auto scatter = vecf_t{dist_unit(rand_eng), dist_unit(rand_eng), dist_unit(rand_eng)};
+          mul(normalize(scatter), intersect.mat.roughness);
+          if(!near_zero(add(scatter, ray.dir_))) {
+            ray.dir_ = scatter;
+          }
+          
+          mul(ray_color, mul(intersect.mat.color, intersect.mat.specular));
           depth += 1;
         }
 
-        add(color, div(intersect.color, 1 << depth));
+        // skybox color
+        auto white = vecf_t{1, 1, 1};
+        mul(ray_color, lerp(white, vecf_t{0.5, 0.7, 1}, (ray.dir_.y + 1) / 2));
+
+
+        add(pixel_color, ray_color);
       }
-      div(color, samples);
-      color.x = sqrtf(std::clamp(color.x, 0.0f, 0.999f));
-      color.y = sqrtf(std::clamp(color.y, 0.0f, 0.999f));
-      color.z = sqrtf(std::clamp(color.z, 0.0f, 0.999f));
-      std::cout << int32_t(255.999 * color.x) << ' '
-                << int32_t(255.999 * color.y) << ' '
-                << int32_t(255.999 * color.z) << std::endl;
+      div(pixel_color, samples);
+      pixel_color.x = sqrtf(std::clamp(pixel_color.x, 0.0f, 0.999f));
+      pixel_color.y = sqrtf(std::clamp(pixel_color.y, 0.0f, 0.999f));
+      pixel_color.z = sqrtf(std::clamp(pixel_color.z, 0.0f, 0.999f));
+      std::cout << int32_t(255.999 * pixel_color.x) << ' '
+                << int32_t(255.999 * pixel_color.y) << ' '
+                << int32_t(255.999 * pixel_color.z) << std::endl;
     }
   }
 }

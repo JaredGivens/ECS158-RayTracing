@@ -33,12 +33,7 @@ float len(quat_t const &);
 quat_t &mul(quat_t &, quat_t const &);
 quat_t &pre_mul(quat_t &, quat_t const &);
 quat_t &from_axis(quat_t &, vecf_t const &, float);
-
-// template <Vec3_like V0>
-// bool equals(V0 const &that, V0 const &v) {
-//   vecf_t v0;
-//   return len_sq(sub(v0 = that, v)) < 0.00001;
-// }
+bool near_zero(vecf_t const &);
 
 template <Vec3_like V, Arithmatic A> V &set(V &that, A x, A y, A z) {
   that.x = x;
@@ -69,6 +64,20 @@ template <Vec3_like V> V &sub(V &that, V const &v) {
   that.x -= v.x;
   that.y -= v.y;
   that.z -= v.z;
+  return that;
+}
+
+template <Vec3_like V> V &mul(V &that, V const &v) {
+  that.x *= v.x;
+  that.y *= v.y;
+  that.z *= v.z;
+  return that;
+}
+
+template <Vec3_like V> V &div(V &that, V const &v) {
+  that.x /= v.x;
+  that.y /= v.y;
+  that.z /= v.z;
   return that;
 }
 
@@ -136,6 +145,11 @@ template <Vec3_like V> V &pre_cross(V &that, V const &v) {
   that.z = v.x * y - v.y * x;
 
   return that;
+}
+
+template <Vec3_like V> V &reflect(V &that, V const &n) {
+  vecf_t v0 = n;
+  return sub(that, mul(v0, 2 * dot(that, n)));
 }
 
 template <Vec3_like V> V &cross(V &that, V const &v) {
@@ -229,13 +243,21 @@ bool sat_for_axes(I begin, I end, vecf_t const &v0, vecf_t const &v1,
   });
 }
 
+struct Material {
+  vecf_t color;
+  float metalness;
+  float specular;
+  float roughness;
+};
+
 struct Sphere {
   vecf_t center;
   float radius;
+  Material mat;
 };
 
 struct Intersect {
-  vecf_t color;
+  Material mat;
   vecf_t pos;
   vecf_t normal;
   float dist;

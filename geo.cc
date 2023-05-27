@@ -86,6 +86,10 @@ quat_t &from_axis(quat_t &that, vecf_t const &axis, float ang) {
   return that;
 }
 
+bool near_zero(vecf_t const & that) {
+  return that.x < 0.0001 && that.y < 0.0001 && that.z < 0.0001;
+}
+
 tsf_t &copy(tsf_t &that, tsf_t const &t) {
   that.pos = t.pos;
   that.rot = t.rot;
@@ -274,6 +278,7 @@ bool Ray::intersect(Intersect &intersect, Sphere const &sphere, float t_min,
   intersect.front = t0 >= 0;
   intersect.pos = at(intersect.dist);
   intersect.normal = intersect.pos;
+  intersect.mat = sphere.mat;
   div(sub(intersect.normal, sphere.center), sphere.radius);
 
   return true;
