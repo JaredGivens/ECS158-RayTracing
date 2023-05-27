@@ -202,7 +202,7 @@ bool Ray::intersect(vecf_t &target, tri_t const &t, bool cull_back) const {
     return false;
   }
 
-  vecf_t diff = pos_;
+  vecf_t diff = origin_;
   sub(diff, t.a);
   float DdQxE2 = sign * dot(dir_, pre_cross(e2, diff));
 
@@ -241,30 +241,37 @@ bool Ray::intersect(vecf_t &target, tri_t const &t, bool cull_back) const {
 
 vecf_t Ray::at(float mag) const {
   vecf_t res = dir_;
-  return add(mul(res = dir_, mag), pos_);
+  return add(mul(res = dir_, mag), origin_);
 }
 
 bool Ray::intersect(Intersect &intersect, Sphere const &sphere, float t_min, float t_max) const {
-    vecf_t oc = pos_;
-    sub(oc, sphere.center);
-    auto a = len_sq(dir_);
-    auto half_b = dot(oc, dir_);
-    auto c = len_sq(oc) - sphere.radius * sphere.radius;
+    vecf_t ab = sphere.center;
+    sub(ab, origin_);
+		float tca = dot(ab, dir_);
+		float d2 = len_sq (ab) - tca * tca;
+		float r2 = sphere.radius * sphere.radius;
 
-    auto discriminant = half_b*half_b - a*c;
-    if (discriminant < 0) return false;
-    auto sqrtd = sqrt(discriminant);
+		if ( d2 > r2 ) return false;
 
-    // Find the nearest root that lies in the acceptable range.
-    auto root = (-half_b - sqrtd) / a;
-    if (root < t_min || t_max < root) {
-        root = (-half_b + sqrtd) / a;
-        if (root < t_min || t_max < root)
-            return false;
-    }
+		float thc = sqrtf( r2 - d2 );
 
-    intersect.t = root;
-    intersect.pos = at(intersect.t);
+		// t0 = first intersect point - entrance on front of sphere
+		float t0 = tca - thc;
+
+		// t1 = second intersect point - exit point on back of sphere
+		float t1 = tca + thc;
+
+		// test to see if t1 is behind the ray - if so, return null
+		if ( t1 < 0 ) return false;
+
+		// test to see if t0 is behind the ray:
+		// if it is, the ray is inside the sphere, so return the second exit point scaled by t1,
+		// in order to always return an intersect point that is in front of the ray.
+
+		// else t0 is in front of the ray, so return the first collision point scaled by t0
+		intersect.dist = t0 < 0 ? t1 : t0;
+		intersect.front = t0 >= 0;
+    intersect.pos = at(intersect.dist);
     intersect.normal = div(sub(intersect.pos, sphere.center), sphere.radius);
 
     return true;

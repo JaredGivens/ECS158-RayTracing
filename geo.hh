@@ -263,15 +263,16 @@ struct Sphere {
 };
 
 struct Intersect {
-    vecf_t pos;
-    vecf_t normal;
-    float t;
+  vecf_t color;
+  vecf_t pos;
+  vecf_t normal;
+  float dist;
+  bool front;
 };
 
 class Ray {
 public:
-  Ray(vecf_t pos, vecf_t dir): pos_(pos), dir_(dir) {}
-  vecf_t pos_;
+  vecf_t origin_;
   vecf_t dir_;
   bool intersect(vecf_t &target, tri_t const &t, bool cull_back) const;
   bool intersect(Intersect &, Sphere const &, float t_min, float t_max) const;

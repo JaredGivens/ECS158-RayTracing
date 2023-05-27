@@ -60,7 +60,7 @@ int32_t main() {
             auto v = float(j) / float(image_height-1);
             // ray from origin to pixel
 
-            auto r = Ray(origin, normalize(sub(add(add(mul(v0 = horizontal, u), mul(v1 = vertical, v)), lower_left_corner), origin)));
+            auto r = Ray{origin, normalize(sub(add(add(mul(v0 = horizontal, u), mul(v1 = vertical, v)), lower_left_corner), origin))};
             // gradient 
             vecf_t pixel_color = ray_color(r, spheres);
             write_color(std::cout, pixel_color);
