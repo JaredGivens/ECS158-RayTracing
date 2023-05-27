@@ -18,15 +18,12 @@ concept Arithmatic = std::is_arithmetic<T>::value;
 
 template <typename V>
 concept Vec3_like = requires {
-                      Arithmatic<decltype(V::x)>;
-                      Arithmatic<decltype(V::y)>;
-                      Arithmatic<decltype(V::z)>;
-                    };
+  Arithmatic<decltype(V::x)>;
+  Arithmatic<decltype(V::y)>;
+  Arithmatic<decltype(V::z)>;
+};
 
-template <typename T>
-T sign(T val) {
-  return (T(0) < val) - (val < T(0));
-}
+template <typename T> T sign(T val) { return (T(0) < val) - (val < T(0)); }
 
 std::ostream &operator<<(std::ostream &os, quat_t const &q);
 quat_t &from_units(quat_t &, vecf_t const &, vecf_t const &);
@@ -43,85 +40,74 @@ quat_t &from_axis(quat_t &, vecf_t const &, float);
 //   return len_sq(sub(v0 = that, v)) < 0.00001;
 // }
 
-template <Vec3_like V, Arithmatic A>
-V &set(V &that, A x, A y, A z) {
+template <Vec3_like V, Arithmatic A> V &set(V &that, A x, A y, A z) {
   that.x = x;
   that.y = y;
   that.z = z;
   return that;
 }
 
-template <Vec3_like V>
-V &zero(V &that) {
+template <Vec3_like V> V &zero(V &that) {
   that.x = 0;
   that.y = 0;
   that.z = 0;
   return that;
 }
 
-template <Vec3_like V>
-bool is_zero(V const&that) {
+template <Vec3_like V> bool is_zero(V const &that) {
   return that.x == 0 && that.y == 0 && that.z == 0;
 }
 
-template <Vec3_like V>
-V &add(V &that, V const &v) {
+template <Vec3_like V> V &add(V &that, V const &v) {
   that.x += v.x;
   that.y += v.y;
   that.z += v.z;
   return that;
 }
 
-template <Vec3_like V>
-V &sub(V &that, V const &v) {
+template <Vec3_like V> V &sub(V &that, V const &v) {
   that.x -= v.x;
   that.y -= v.y;
   that.z -= v.z;
   return that;
 }
 
-template <Vec3_like V, Arithmatic A>
-V &add(V &that, A s) {
+template <Vec3_like V, Arithmatic A> V &add(V &that, A s) {
   that.x += s;
   that.y += s;
   that.z += s;
   return that;
 }
 
-template <Vec3_like V, Arithmatic A>
-V &sub(V &that, A s) {
+template <Vec3_like V, Arithmatic A> V &sub(V &that, A s) {
   that.x -= s;
   that.y -= s;
   that.z -= s;
   return that;
 }
 
-template <Vec3_like V, Arithmatic A>
-V &div(V &that, A s) {
+template <Vec3_like V, Arithmatic A> V &div(V &that, A s) {
   that.x /= s;
   that.y /= s;
   that.z /= s;
   return that;
 }
 
-template <Vec3_like V, Arithmatic A>
-V &mul(V &that, A s) {
+template <Vec3_like V, Arithmatic A> V &mul(V &that, A s) {
   that.x *= s;
   that.y *= s;
   that.z *= s;
   return that;
 }
 
-template <Vec3_like V>
-V &lerp(V &that, V const &v, float a) {
+template <Vec3_like V> V &lerp(V &that, V const &v, float a) {
   that.x += (v.x - that.x) * a;
   that.y += (v.y - that.y) * a;
   that.z += (v.z - that.z) * a;
   return that;
 }
 
-template <Vec3_like V, Arithmatic A>
-V &add_len(V &that, A s) {
+template <Vec3_like V, Arithmatic A> V &add_len(V &that, A s) {
   A l = len(that);
   that.x += (that.x / l) * s;
   that.y += (that.y / l) * s;
@@ -129,23 +115,19 @@ V &add_len(V &that, A s) {
   return that;
 }
 
-template <Vec3_like V>
-decltype(V::x) dot(V const &that, V const &v) {
+template <Vec3_like V> decltype(V::x) dot(V const &that, V const &v) {
   return that.x * v.x + that.y * v.y + that.z * v.z;
 }
 
-template <Vec3_like V>
-decltype(V::x) len_sq(V const &that) {
+template <Vec3_like V> decltype(V::x) len_sq(V const &that) {
   return that.x * that.x + that.y * that.y + that.z * that.z;
 }
 
-template <Vec3_like V>
-decltype(V::x) len(V const &that) {
+template <Vec3_like V> decltype(V::x) len(V const &that) {
   return sqrt(that.x * that.x + that.y * that.y + that.z * that.z);
 }
 
-template <Vec3_like V>
-V &pre_cross(V &that, V const &v) {
+template <Vec3_like V> V &pre_cross(V &that, V const &v) {
 
   decltype(V::x) const x = that.x, y = that.y, z = that.z;
 
@@ -156,8 +138,7 @@ V &pre_cross(V &that, V const &v) {
   return that;
 }
 
-template <Vec3_like V>
-V &cross(V &that, V const &v) {
+template <Vec3_like V> V &cross(V &that, V const &v) {
 
   decltype(V::x) const x = that.x, y = that.y, z = that.z;
 
@@ -168,8 +149,7 @@ V &cross(V &that, V const &v) {
   return that;
 }
 
-template <Vec3_like V>
-V &mul(V &that, quat_t const &q) {
+template <Vec3_like V> V &mul(V &that, quat_t const &q) {
   float const ix = q.w * that.x + q.y * that.z - q.z * that.y;
   float const iy = q.w * that.y + q.z * that.x - q.x * that.z;
   float const iz = q.w * that.z + q.x * that.y - q.y * that.x;
@@ -182,18 +162,14 @@ V &mul(V &that, quat_t const &q) {
   return that;
 }
 
-template <Vec3_like V>
-V &abs(V &that) {
+template <Vec3_like V> V &abs(V &that) {
   that.x = std::abs(that.x);
   that.y = std::abs(that.y);
   that.z = std::abs(that.z);
   return that;
 }
 
-template <Vec3_like V>
-V &normalize(V &that) {
-  return div(that, len(that));
-}
+template <Vec3_like V> V &normalize(V &that) { return div(that, len(that)); }
 
 template <Vec3_like V>
 std::ostream &operator<<(std::ostream &os, V const &that) {
@@ -201,8 +177,7 @@ std::ostream &operator<<(std::ostream &os, V const &that) {
   return os;
 }
 
-template <Vec3_like V, Arithmatic A>
-V &add(V &that, V const &v, A s) {
+template <Vec3_like V, Arithmatic A> V &add(V &that, V const &v, A s) {
   that.x += v.x * s;
   that.y += v.y * s;
   that.z += v.z * s;
@@ -210,21 +185,18 @@ V &add(V &that, V const &v, A s) {
 }
 
 // assumes norm normalized
-template <Vec3_like V>
-V &project(V &that, V const &norm) {
+template <Vec3_like V> V &project(V &that, V const &norm) {
   V v0;
   sub(that, mul(v0 = norm, dot(that, norm)));
   return that;
 }
 
-template <class T>
-inline void hash_combine(int32_t &seed, const T &v) {
+template <class T> inline void hash_combine(int32_t &seed, const T &v) {
   std::hash<T> hasher;
   seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
 
-template <Vec3_like V>
-int32_t hash(V const &that) {
+template <Vec3_like V> int32_t hash(V const &that) {
   int32_t s = 0;
   hash_combine(s, that.x);
   hash_combine(s, that.y);
@@ -233,8 +205,8 @@ int32_t hash(V const &that) {
 }
 
 // seg_t &set(seg_t &, vecf_t const &, vecf_t const &);
-vecf_t &compute_norm(vecf_t &, tri_t const&);
-vecf_t &compute_mid(vecf_t &,tri_t const&);
+vecf_t &compute_norm(vecf_t &, tri_t const &);
+vecf_t &compute_mid(vecf_t &, tri_t const &);
 
 vecf_t compute_bary(tri_t const &, vecf_t const &);
 
@@ -278,6 +250,5 @@ public:
   bool intersect(Intersect &, Sphere const &, float t_min, float t_max) const;
   vecf_t at(float mag) const;
 };
-
 
 #endif

@@ -33,12 +33,6 @@ class Camera {
         vecf_t vert_;
 };
 
-void write_color(std::ostream &out, vecf_t pixel_color) {
-  // Write the translated [0,255] value of each color component.
-  out << int32_t(255.999 * pixel_color.x) << ' '
-      << int32_t(255.999 * pixel_color.y) << ' '
-      << int32_t(255.999 * pixel_color.z) << '\n';
-}
 
 constexpr float kInf = std::numeric_limits<float>::infinity();
 bool ray_color(Intersect &record, Ray const &ray,
@@ -119,7 +113,12 @@ int32_t main() {
         add(color, div(intersect.color, 1 << depth));
       }
       div(color, samples);
-      write_color(std::cout, color);
+      color.x = sqrtf(std::clamp(color.x, 0.0f, 0.999f));
+      color.y = sqrtf(std::clamp(color.y, 0.0f, 0.999f));
+      color.z = sqrtf(std::clamp(color.z, 0.0f, 0.999f));
+  std::cout << int32_t(255.999 * color.x) << ' '
+      << int32_t(255.999 * color.y) << ' '
+      << int32_t(255.999 * color.z) << std::endl;
     }
   }
 }

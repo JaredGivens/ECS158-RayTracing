@@ -244,36 +244,41 @@ vecf_t Ray::at(float mag) const {
   return add(mul(res = dir_, mag), origin_);
 }
 
-bool Ray::intersect(Intersect &intersect, Sphere const &sphere, float t_min, float t_max) const {
-    vecf_t ab = sphere.center;
-    sub(ab, origin_);
-		float tca = dot(ab, dir_);
-		float d2 = len_sq (ab) - tca * tca;
-		float r2 = sphere.radius * sphere.radius;
+bool Ray::intersect(Intersect &intersect, Sphere const &sphere, float t_min,
+                    float t_max) const {
+  vecf_t ab = sphere.center;
+  sub(ab, origin_);
+  float tca = dot(ab, dir_);
+  float d2 = len_sq(ab) - tca * tca;
+  float r2 = sphere.radius * sphere.radius;
 
-		if ( d2 > r2 ) return false;
+  if (d2 > r2)
+    return false;
 
-		float thc = sqrtf( r2 - d2 );
+  float thc = sqrtf(r2 - d2);
 
-		// t0 = first intersect point - entrance on front of sphere
-		float t0 = tca - thc;
+  // t0 = first intersect point - entrance on front of sphere
+  float t0 = tca - thc;
 
-		// t1 = second intersect point - exit point on back of sphere
-		float t1 = tca + thc;
+  // t1 = second intersect point - exit point on back of sphere
+  float t1 = tca + thc;
 
-		// test to see if t1 is behind the ray - if so, return null
-		if ( t1 < 0 ) return false;
+  // test to see if t1 is behind the ray - if so, return null
+  if (t1 < 0)
+    return false;
 
-		// test to see if t0 is behind the ray:
-		// if it is, the ray is inside the sphere, so return the second exit point scaled by t1,
-		// in order to always return an intersect point that is in front of the ray.
+  // test to see if t0 is behind the ray:
+  // if it is, the ray is inside the sphere, so return the second exit point
+  // scaled by t1, in order to always return an intersect point that is in front
+  // of the ray.
 
-		// else t0 is in front of the ray, so return the first collision point scaled by t0
-		intersect.dist = t0 < 0 ? t1 : t0;
-		intersect.front = t0 >= 0;
-    intersect.pos = at(intersect.dist);
-    intersect.normal = intersect.pos;
-    div(sub(intersect.normal, sphere.center), sphere.radius);
+  // else t0 is in front of the ray, so return the first collision point scaled
+  // by t0
+  intersect.dist = t0 < 0 ? t1 : t0;
+  intersect.front = t0 >= 0;
+  intersect.pos = at(intersect.dist);
+  intersect.normal = intersect.pos;
+  div(sub(intersect.normal, sphere.center), sphere.radius);
 
-    return true;
+  return true;
 }

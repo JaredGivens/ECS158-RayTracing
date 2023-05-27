@@ -44,7 +44,6 @@ typedef union {
   vecf_t vecs[3];
 } tri_t;
 
-
 #ifdef __cplusplus
 }
 #endif
