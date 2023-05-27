@@ -2,6 +2,7 @@
 #include <iostream>
 #include <stdint.h>
 #include <vector>
+#include <random>
 
 void write_color(std::ostream &out, vecf_t pixel_color) {
   // Write the translated [0,255] value of each color component.
@@ -33,6 +34,7 @@ bool ray_color(Intersect &record, Ray const &ray,
   return false;
 }
 
+auto uni_dist01 = std::uniform_real_distribution<float>(0, 1);
 int32_t main() {
 
   auto spheres = std::vector<Sphere>();
@@ -41,9 +43,9 @@ int32_t main() {
 
   // Image
 
-  const float aspect_ratio = 16.0 / 9.0;
-  const int32_t image_height = 255;
-  const int32_t image_width = image_height * aspect_ratio;
+  float const aspect_ratio = 16.0 / 9.0;
+  int32_t const image_height = 255;
+  int32_t const image_width = image_height * aspect_ratio;
 
   float viewport_height = 2.0;
   float viewport_width = aspect_ratio * viewport_height;
@@ -59,6 +61,8 @@ int32_t main() {
       sub(v1 = origin, add(div(add(v0 = horizontal, vertical), 2),
                            vecf_t{0, 0, focal_length}));
   float max_depth = 1;
+  float samples = 20;
+  auto rand_eng = std::default_random_engine();
 
   // Render
 
@@ -66,22 +70,27 @@ int32_t main() {
 
   for (int32_t j = image_height - 1; j > -1; --j) {
     for (int32_t i = 0; i < image_width; ++i) {
-      auto u = float(i) / float(image_width - 1);
-      auto v = float(j) / float(image_height - 1);
-      // ray from origin to pixel
+      auto color = vecf_t{0, 0, 0};
+      for (int32_t k = 0; k < samples; ++k) {
+        auto u = float(i + uni_dist01(rand_eng)) / float(image_width - 1);
+        auto v = float(j + uni_dist01(rand_eng)) / float(image_height - 1);
+        // ray from origin to pixel
 
-      auto r = Ray{
-          origin,
-          normalize(sub(add(add(mul(v0 = horizontal, u), mul(v1 = vertical, v)),
-                            lower_left_corner),
-                        origin))};
-      int32_t depth = 0;
-      Intersect intersect;
-      // gradient
-      while (ray_color(intersect, r, spheres) && depth < max_depth) {
-        depth += 1;
+        auto r = Ray{
+            origin,
+            normalize(sub(add(add(mul(v0 = horizontal, u), mul(v1 = vertical, v)),
+                              lower_left_corner),
+                          origin))};
+        int32_t depth = 0;
+        Intersect intersect;
+        // gradient
+        while (ray_color(intersect, r, spheres) && depth < max_depth) {
+          depth += 1;
+        }
+        add(color, intersect.color);
       }
-      write_color(std::cout, intersect.color);
+      div(color, samples);
+      write_color(std::cout, color);
     }
   }
 }
