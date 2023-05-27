@@ -52,7 +52,8 @@ bool ray_color(Intersect &record, Ray const &ray,
     }
   }
   if (record.dist != kInf) {
-    record.color = div(add(record.normal, 1), 2);
+    // record.color = div(add(record.normal, 1), 2);
+    record.color = vecf_t{0, 0, 0};
     return true;
   }
 
@@ -61,6 +62,11 @@ bool ray_color(Intersect &record, Ray const &ray,
   auto blue = vecf_t{0.5, 0.7, 1};
   record.color = add(mul(white, (1.0 - t)), mul(blue, t));
   return false;
+}
+
+vecf_t random_unit_vec(std::default_random_engine rand_eng) {
+  auto static dist_unit = std::uniform_real_distribution<float>(-1/sqrtf(2), 1/sqrt(2));
+  return vecf_t{ dist_unit(rand_eng),dist_unit(rand_eng),dist_unit(rand_eng)};
 }
 
 auto uni_dist01 = std::uniform_real_distribution<float>(0, 1);
@@ -84,7 +90,7 @@ int32_t main() {
   vecf_t v1;
 
   auto cam = Camera();
-  float max_depth = 1;
+  float max_depth = 10;
   float samples = 20;
   auto rand_eng = std::default_random_engine();
 
@@ -105,9 +111,12 @@ int32_t main() {
         Intersect intersect;
         // gradient
         while (ray_color(intersect, r, spheres) && depth < max_depth) {
+          r.origin_ = intersect.pos;
+          r.dir_ = normalize(add(intersect.normal, random_unit_vec(rand_eng)));
           depth += 1;
         }
-        add(color, intersect.color);
+
+        add(color, div(intersect.color, 1 << depth));
       }
       div(color, samples);
       write_color(std::cout, color);

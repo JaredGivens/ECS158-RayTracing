@@ -272,7 +272,8 @@ bool Ray::intersect(Intersect &intersect, Sphere const &sphere, float t_min, flo
 		intersect.dist = t0 < 0 ? t1 : t0;
 		intersect.front = t0 >= 0;
     intersect.pos = at(intersect.dist);
-    intersect.normal = div(sub(intersect.pos, sphere.center), sphere.radius);
+    intersect.normal = intersect.pos;
+    div(sub(intersect.normal, sphere.center), sphere.radius);
 
     return true;
 }
