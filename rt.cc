@@ -1,38 +1,40 @@
 #include "geo.hh"
 #include <iostream>
+#include <random>
 #include <stdint.h>
 #include <vector>
-#include <random>
 
 class Camera {
-    public:
-        Camera() {
-            float aspect_ratio = 16.0 / 9.0;
-            float viewport_height = 2.0;
-            float viewport_width = aspect_ratio * viewport_height;
-            float focal_length = 1.0;
+public:
+  Camera() {
+    float aspect_ratio = 16.0 / 9.0;
+    float viewport_height = 2.0;
+    float viewport_width = aspect_ratio * viewport_height;
+    float focal_length = 1.0;
 
-            origin_ = vecf_t{0, 0, 0};
-            hor_ = vecf_t{viewport_width, 0.0, 0.0};
-            vert_ = vecf_t{0.0, viewport_height, 0.0};
-            vecf_t hor = hor_;
-            vecf_t origin = origin_;
-            lower_left_ = sub(origin, add(div(add(hor, vert_), 2), vecf_t{0, 0, focal_length}));
-        }
+    origin_ = vecf_t{0, 0, 0};
+    hor_ = vecf_t{viewport_width, 0.0, 0.0};
+    vert_ = vecf_t{0.0, viewport_height, 0.0};
+    vecf_t hor = hor_;
+    vecf_t origin = origin_;
+    lower_left_ =
+        sub(origin, add(div(add(hor, vert_), 2), vecf_t{0, 0, focal_length}));
+  }
 
-        Ray get_ray(float u, float v) const {
-          vecf_t hor = hor_;
-          vecf_t vert = vert_;
-            return Ray{origin_, normalize(sub(add(add(mul(hor, u), mul(vert, v)), lower_left_), origin_))};
-        }
+  Ray get_ray(float u, float v) const {
+    vecf_t hor = hor_;
+    vecf_t vert = vert_;
+    return Ray{origin_,
+               normalize(sub(add(add(mul(hor, u), mul(vert, v)), lower_left_),
+                             origin_))};
+  }
 
-    private:
-        vecf_t origin_;
-        vecf_t lower_left_;
-        vecf_t hor_;
-        vecf_t vert_;
+private:
+  vecf_t origin_;
+  vecf_t lower_left_;
+  vecf_t hor_;
+  vecf_t vert_;
 };
-
 
 constexpr float kInf = std::numeric_limits<float>::infinity();
 bool ray_color(Intersect &record, Ray const &ray,
@@ -40,7 +42,7 @@ bool ray_color(Intersect &record, Ray const &ray,
   record.dist = kInf;
   Intersect intersect;
   for (auto const &sphere : spheres) {
-    if (ray.intersect(intersect, sphere, 0, kInf) &&
+    if (ray.intersect(intersect, sphere, 0.001, kInf) &&
         intersect.dist < record.dist) {
       record = intersect;
     }
@@ -59,8 +61,13 @@ bool ray_color(Intersect &record, Ray const &ray,
 }
 
 vecf_t random_unit_vec(std::default_random_engine rand_eng) {
-  auto static dist_unit = std::uniform_real_distribution<float>(-1/sqrtf(2), 1/sqrt(2));
-  return vecf_t{ dist_unit(rand_eng),dist_unit(rand_eng),dist_unit(rand_eng)};
+  auto static dist_unit =
+      std::uniform_real_distribution<float>(-1 / sqrtf(2), 1 / sqrt(2));
+  // auto static dist_unit =
+  //     std::uniform_real_distribution<float>(-1, 1);
+  auto res = vecf_t{dist_unit(rand_eng), dist_unit(rand_eng), dist_unit(rand_eng)};
+  // technically this normalize can be removed but this is the true
+  return normalize(res);
 }
 
 auto uni_dist01 = std::uniform_real_distribution<float>(0, 1);
@@ -84,8 +91,8 @@ int32_t main() {
   vecf_t v1;
 
   auto cam = Camera();
-  float max_depth = 10;
-  float samples = 20;
+  float max_depth = 20;
+  float samples = 10;
   auto rand_eng = std::default_random_engine();
 
   // Render
@@ -116,9 +123,9 @@ int32_t main() {
       color.x = sqrtf(std::clamp(color.x, 0.0f, 0.999f));
       color.y = sqrtf(std::clamp(color.y, 0.0f, 0.999f));
       color.z = sqrtf(std::clamp(color.z, 0.0f, 0.999f));
-  std::cout << int32_t(255.999 * color.x) << ' '
-      << int32_t(255.999 * color.y) << ' '
-      << int32_t(255.999 * color.z) << std::endl;
+      std::cout << int32_t(255.999 * color.x) << ' '
+                << int32_t(255.999 * color.y) << ' '
+                << int32_t(255.999 * color.z) << std::endl;
     }
   }
 }

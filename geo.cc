@@ -267,14 +267,10 @@ bool Ray::intersect(Intersect &intersect, Sphere const &sphere, float t_min,
   if (t1 < 0)
     return false;
 
-  // test to see if t0 is behind the ray:
-  // if it is, the ray is inside the sphere, so return the second exit point
-  // scaled by t1, in order to always return an intersect point that is in front
-  // of the ray.
-
-  // else t0 is in front of the ray, so return the first collision point scaled
-  // by t0
   intersect.dist = t0 < 0 ? t1 : t0;
+  if (intersect.dist < t_min || intersect.dist > t_max) {
+    return false;
+  }
   intersect.front = t0 >= 0;
   intersect.pos = at(intersect.dist);
   intersect.normal = intersect.pos;
