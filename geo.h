@@ -1,5 +1,5 @@
-#ifndef DRYF_GEO_H
-#define DRYF_GEO_H
+#ifndef GEO_H
+#define GEO_H
 
 #include <math.h>
 #include <stdint.h>

@@ -1,5 +1,5 @@
-#ifndef DRYF_GEO_HH
-#define DRYF_GEO_HH
+#ifndef GEO_HH
+#define GEO_HH
 
 #include <concepts>
 #include <iostream>

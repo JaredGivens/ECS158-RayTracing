@@ -5,7 +5,7 @@
 #include <iostream>
 #include <random>
 #include <vector>
-#include <time>
+#include <chrono>
 
 #include "geo.hh"
 
