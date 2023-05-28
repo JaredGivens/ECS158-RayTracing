@@ -250,40 +250,6 @@ vecf_t Ray::at(float mag) const {
 
 bool Ray::intersect(Intersect &intersect, Sphere const &sphere, float t_min,
                     float t_max) const {
-  // vecf_t ab = sphere.center;
-  // sub(ab, origin_);
-  // float tca = dot(ab, dir_);
-  // float d2 = len_sq(ab) - tca * tca;
-  // float r2 = sphere.radius * sphere.radius;
-
-  // if (d2 > r2)
-  //   return false;
-
-  // float thc = sqrtf(r2 - d2);
-
-  // // t0 = first intersect point - entrance on front of sphere
-  // float t0 = tca - thc;
-
-  // // t1 = second intersect point - exit point on back of sphere
-  // float t1 = tca + thc;
-
-  // // test to see if t1 is behind the ray - if so, return null
-  // if (t1 < 0)
-  //   return false;
-
-  // intersect.front = t0 >= 0;
-  // intersect.dist = intersect.front ? t0 : t1;
-  // if (intersect.dist < t_min || intersect.dist > t_max) {
-  //   return false;
-  // }
-  // intersect.pos = at(intersect.dist);
-  // div(sub(intersect.normal = intersect.pos, sphere.center), sphere.radius);
-  // if (!intersect.front) {
-  //   mul(intersect.normal , -1);
-  // }
-  // intersect.mat = sphere.mat;
-  // return true;
-
    vecf_t oc = origin_;
    sub(oc, sphere.center);
     auto half_b = dot(oc, dir_);

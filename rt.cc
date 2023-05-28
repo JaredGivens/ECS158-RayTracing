@@ -10,8 +10,11 @@
 
 class Camera {
  public:
-  Camera(float aspect_ratio) {
-    float viewport_height = 2.0;
+  Camera(float vfov, float aspect_ratio) {
+
+    auto theta = vfov / 180 * kPi;
+    auto h = tan(theta/2);
+    float viewport_height = 2.0 * h;
     float viewport_width = aspect_ratio * viewport_height;
     float focal_length = 1.0;
 
@@ -105,32 +108,36 @@ void raytrace_frame(Raytracer &rt) {
                                          ? 1 / intersect.mat.refraction
                                          : intersect.mat.refraction;
             float cos_theta = -dot(ray.dir_, intersect.normal);
-            // float sin_theta = sqrt(1.0 - cos_theta * cos_theta);
-            // if (refraction_ratio * sin_theta > 1.0) {
-              // metal_reflect(ray.dir_, intersect);
-            // } else {
-            vecf_t v0 = intersect.normal;
-            mul(add(ray.dir_, mul(v0, cos_theta)), refraction_ratio);
-            vecf_t parallel =
-                mul(v0 = intersect.normal, -sqrt(fabs(1.0 -
-                len_sq(ray.dir_))));
-            add(ray.dir_, parallel);
-            // }
+            float sin_theta = sqrt(1.0 - cos_theta * cos_theta);
+
+            // Use Schlick's approximation for reflectance.
+            auto reflectance = (1-refraction_ratio) / (1+refraction_ratio);
+            reflectance *= reflectance;
+            reflectance += (1-reflectance)*pow((1 - cos_theta), 5);
+
+            if (refraction_ratio * sin_theta > 1.0 || reflectance > uni_dist01(rt.rand_eng)) {
+              metal_reflect(ray.dir_, intersect);
+            } else {
+              vecf_t v0 = intersect.normal;
+              mul(add(ray.dir_, mul(v0, cos_theta)), refraction_ratio);
+              vecf_t parallel = mul(v0 = intersect.normal,
+                                    -sqrt(fabs(1.0 - len_sq(ray.dir_))));
+              add(ray.dir_, parallel);
+            }
           } else {
             metal_reflect(ray.dir_, intersect);
+          }
 
-            // roughness fuzzing
-            auto static dist_unit =
-                std::uniform_real_distribution<float>(-1/sqrtf(2), 1/sqrtf(2));
-            auto scatter =
-                vecf_t{dist_unit(rt.rand_eng), dist_unit(rt.rand_eng),
-                       dist_unit(rt.rand_eng)};
+          // roughness fuzzing
+          auto static dist_unit = std::uniform_real_distribution<float>(
+              -1 / sqrtf(2), 1 / sqrtf(2));
+          auto scatter = vecf_t{dist_unit(rt.rand_eng), dist_unit(rt.rand_eng),
+                                dist_unit(rt.rand_eng)};
 
-            if (dot(scatter, intersect.normal) > 0) {
-              normalize(add(ray.dir_, mul(scatter, intersect.mat.roughness)));
-            }else {
-              normalize(add(ray.dir_, mul(scatter, -intersect.mat.roughness)));
-            }
+          if (dot(scatter, intersect.normal) > 0) {
+            normalize(add(ray.dir_, mul(scatter, intersect.mat.roughness)));
+          } else {
+            normalize(add(ray.dir_, mul(scatter, -intersect.mat.roughness)));
           }
 
           mul(ray_color, mul(intersect.mat.color, intersect.mat.specular));
@@ -139,8 +146,7 @@ void raytrace_frame(Raytracer &rt) {
 
         // skybox color
         auto white = vecf_t{1, 1, 1};
-        mul(ray_color, lerp(white, vecf_t{0.5, 0.7, 1},(ray.dir_.y + 1) / 2));
-
+        mul(ray_color, lerp(white, vecf_t{0.5, 0.7, 1}, (ray.dir_.y + 1) / 2));
 
         add(pixel_color, ray_color);
       }
@@ -169,8 +175,9 @@ int32_t main() {
   };
   auto spheres = std::vector<Sphere>();
   spheres.push_back(Sphere{vecf_t{-1, 0, -1}, 0.5, yellow_diff});
-  spheres.push_back(Sphere{vecf_t{0, 0, -1}, 0.5, glass});
-  spheres.push_back(Sphere{vecf_t{1, 0, -1}, 0.5, blue_metal});
+  spheres.push_back(Sphere{vecf_t{0, 0, -1}, 0.5, blue_metal});
+  spheres.push_back(Sphere{vecf_t{1, 0, -1}, 0.5, glass});
+  spheres.push_back(Sphere{vecf_t{1, 0, -1}, -0.4, glass});
   spheres.push_back(Sphere{vecf_t{0, -100.5, -1}, 100, yellow_diff});
 
   float const aspect_ratio = 16.0 / 9.0;
@@ -202,7 +209,7 @@ int32_t main() {
       .screen_width = screen_width,
       .renderer = renderer,
       .samples = 50,
-      .cam = Camera(aspect_ratio),
+      .cam = Camera(90, aspect_ratio),
       .spheres = spheres,
       .ray_depth = 20,
       .rand_eng = std::default_random_engine(),
