@@ -5,6 +5,7 @@
 #include <iostream>
 #include <random>
 #include <vector>
+#include <time>
 
 #include "geo.hh"
 
@@ -234,8 +235,6 @@ void raytrace_frame(Raytracer &rt) {
         .rand_eng = std::default_random_engine(),
     };
     raytracer.screen_buf = new vecb_t[screen_height * screen_width];
-    int32_t frame_throttle = 100000;
-    int32_t frame_cd = frame_throttle;
 
     // Render
     SDL_Event e;
@@ -260,6 +259,10 @@ void raytrace_frame(Raytracer &rt) {
           case SDLK_d:
             raytracer.cam.pos_.x += 1;
             break;
+          case SDLK_f:
+            raytracer.cam.update_transform();
+            raytrace_frame(raytracer);
+            break;
           }
           // KEYS[e.key.keysym.sym] = true;
           break;
@@ -277,17 +280,12 @@ void raytrace_frame(Raytracer &rt) {
           if (SDL_GetRelativeMouseMode()) {
             quat_t q0;
             from_axis(q0, kUnitY, e.motion.xrel);
-            pre_mul(q0, raytracer.cam.rot_);
+            pre_mul(raytracer.cam.rot_, q0);
             from_axis(q0, kUnitX, e.motion.yrel);
-            pre_mul(q0, raytracer.cam.rot_);
+            pre_mul(raytracer.cam.rot_, q0);
           }
           break;
         }
-      }
-      raytracer.cam.update_transform();
-      if (++frame_cd > frame_throttle) {
-        raytrace_frame(raytracer);
-        frame_cd = 0;
       }
     }
     SDL_DestroyWindow(window);
