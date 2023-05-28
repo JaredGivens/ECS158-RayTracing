@@ -1,13 +1,14 @@
 #include "geo.hh"
+#include <SDL.h>
 #include <iostream>
 #include <random>
 #include <stdint.h>
+#include <unistd.h>
 #include <vector>
 
 class Camera {
 public:
-  Camera() {
-    float aspect_ratio = 16.0 / 9.0;
+  Camera(float aspect_ratio) {
     float viewport_height = 2.0;
     float viewport_width = aspect_ratio * viewport_height;
     float focal_length = 1.0;
@@ -38,7 +39,7 @@ private:
 
 constexpr float kInf = std::numeric_limits<float>::infinity();
 bool cast_ray(Intersect &record, Ray const &ray,
-               std::vector<Sphere> const &spheres) {
+              std::vector<Sphere> const &spheres) {
   record.dist = kInf;
   Intersect intersect;
   for (auto const &sphere : spheres) {
@@ -59,85 +60,58 @@ bool cast_ray(Intersect &record, Ray const &ray,
 vecf_t refract(vecf_t v, vecf_t n, float refractive_index_ratio) {
   auto cos_theta = fmin(dot(mul(v, -1), n), 1.0);
   vecf_t r_out_perp = mul(add(v, mul(n, cos_theta)), refractive_index_ratio);
-  vecf_t r_out_parallel = mul(n,-sqrt(fabs(1.0 - len_sq(r_out_perp))));
+  vecf_t r_out_parallel = mul(n, -sqrt(fabs(1.0 - len_sq(r_out_perp))));
   return add(r_out_perp, r_out_parallel);
 }
 
-
 auto uni_dist01 = std::uniform_real_distribution<float>(0, 1);
-int32_t main() {
+struct Raytracer {
+  int32_t screen_height;
+  int32_t screen_width;
+  SDL_Renderer *renderer;
+  int32_t samples;
+  Camera cam;
+  std::vector<Sphere> spheres;
+  int32_t ray_depth;
+  std::default_random_engine rand_eng;
+};
 
-  Material yellow_diff = {
-    vecf_t{1,1,.2},
-    0,
-    .5,
-    1,
-  };
-
-  Material blue_metal = {
-    vecf_t{1,1,1},
-    1,
-    .9,
-    0,
-  };
-
-  auto spheres = std::vector<Sphere>();
-  spheres.push_back(Sphere{vecf_t{0, 0, -1}, 0.5, yellow_diff});
-  spheres.push_back(Sphere{vecf_t{1, 0, -1}, 0.5, blue_metal});
-  spheres.push_back(Sphere{vecf_t{0, -100.5, -1}, 100, yellow_diff});
-
-  // Image
-
-  float const aspect_ratio = 16.0 / 9.0;
-  int32_t const image_height = 255;
-  int32_t const image_width = image_height * aspect_ratio;
-
-  float viewport_height = 2.0;
-  float viewport_width = aspect_ratio * viewport_height;
-  float focal_length = 1.0;
-
-  vecf_t v0;
-  vecf_t v1;
-
-  auto cam = Camera();
-  float max_depth = 20;
-  float samples = 50;
-  auto rand_eng = std::default_random_engine();
-
-  // Render
-
-  std::cout << "P3\n" << image_width << ' ' << image_height << "\n255\n";
-
-  for (int32_t j = image_height - 1; j > -1; --j) {
-    for (int32_t i = 0; i < image_width; ++i) {
+void raytrace_frame(Raytracer &rt) {
+  SDL_RenderClear(rt.renderer);
+  for (int32_t j = rt.screen_height - 1; j > -1; --j) {
+    for (int32_t i = 0; i < rt.screen_width; ++i) {
       auto pixel_color = vecf_t{0, 0, 0};
-      for (int32_t k = 0; k < samples; ++k) {
-        auto u = float(i + uni_dist01(rand_eng)) / float(image_width - 1);
-        auto v = float(j + uni_dist01(rand_eng)) / float(image_height - 1);
+      for (int32_t k = 0; k < rt.samples; ++k) {
+        auto u =
+            float(i + uni_dist01(rt.rand_eng)) / float(rt.screen_width - 1);
+        auto v =
+            float(j + uni_dist01(rt.rand_eng)) / float(rt.screen_height - 1);
         // ray from origin to pixel
 
-        Ray ray = cam.get_ray(u, v);
+        Ray ray = rt.cam.get_ray(u, v);
         int32_t depth = 0;
         auto ray_color = vecf_t{1, 1, 1};
         Intersect intersect;
         // gradient
-        while (cast_ray(intersect, ray, spheres) && depth < max_depth) {
+        while (cast_ray(intersect, ray, rt.spheres) && depth < rt.ray_depth) {
           ray.origin_ = intersect.pos;
 
           // metalness reflection
-          normalize(lerp(reflect(ray.dir_, intersect.normal), intersect.normal, 1-intersect.mat.metalness));
+          normalize(lerp(reflect(ray.dir_, intersect.normal), intersect.normal,
+                         1 - intersect.mat.metalness));
 
           // roughness fuzzing
           auto static dist_unit =
               std::uniform_real_distribution<float>(-1 / sqrtf(2), 1 / sqrt(2));
           // auto static dist_unit =
           //     std::uniform_real_distribution<float>(-1, 1);
-          auto scatter = vecf_t{dist_unit(rand_eng), dist_unit(rand_eng), dist_unit(rand_eng)};
+          auto scatter = vecf_t{dist_unit(rt.rand_eng), dist_unit(rt.rand_eng),
+                                dist_unit(rt.rand_eng)};
           mul(normalize(scatter), intersect.mat.roughness);
-          if(!near_zero(add(scatter, ray.dir_))) {
+          if (!near_zero(add(scatter, ray.dir_))) {
             ray.dir_ = scatter;
           }
-          
+
           mul(ray_color, mul(intersect.mat.color, intersect.mat.specular));
           depth += 1;
         }
@@ -146,16 +120,93 @@ int32_t main() {
         auto white = vecf_t{1, 1, 1};
         mul(ray_color, lerp(white, vecf_t{0.5, 0.7, 1}, (ray.dir_.y + 1) / 2));
 
-
         add(pixel_color, ray_color);
       }
-      div(pixel_color, samples);
-      pixel_color.x = sqrtf(std::clamp(pixel_color.x, 0.0f, 0.999f));
-      pixel_color.y = sqrtf(std::clamp(pixel_color.y, 0.0f, 0.999f));
-      pixel_color.z = sqrtf(std::clamp(pixel_color.z, 0.0f, 0.999f));
-      std::cout << int32_t(255.999 * pixel_color.x) << ' '
-                << int32_t(255.999 * pixel_color.y) << ' '
-                << int32_t(255.999 * pixel_color.z) << std::endl;
+      div(pixel_color, rt.samples);
+      int32_t r = 255.999 * sqrtf(std::clamp(pixel_color.x, 0.0f, 0.999f));
+      int32_t g = 255.999 * sqrtf(std::clamp(pixel_color.y, 0.0f, 0.999f));
+      int32_t b = 255.999 * sqrtf(std::clamp(pixel_color.z, 0.0f, 0.999f));
+      if(near_zero(pixel_color)) {
+        std::cout << pixel_color << std::endl;
+      }
+      SDL_SetRenderDrawColor(rt.renderer, r, g, b, 0);
+      SDL_RenderDrawPoint(rt.renderer, rt.screen_width - i,
+                          rt.screen_height - j);
     }
   }
+  SDL_RenderPresent(rt.renderer);
+}
+
+int32_t main() {
+
+  Material yellow_diff = {
+      vecf_t{1, 1, .2},
+      0,
+      .5,
+      1,
+  };
+
+  Material blue_metal = {
+      vecf_t{1, 1, 1},
+      1,
+      .9,
+      0,
+  };
+
+  auto spheres = std::vector<Sphere>();
+  spheres.push_back(Sphere{vecf_t{0, 0, -1}, 0.5, yellow_diff});
+  spheres.push_back(Sphere{vecf_t{1, 0, -1}, 0.5, blue_metal});
+  spheres.push_back(Sphere{vecf_t{0, -100.5, -1}, 100, yellow_diff});
+
+  float const aspect_ratio = 16.0 / 9.0;
+  int32_t const screen_height = 255;
+  int32_t const screen_width = screen_height * aspect_ratio;
+
+  // Initialize SDL
+  if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+    std::cerr << "SDL Init Error:\n" << SDL_GetError() << std::endl;
+    exit(1);
+  }
+  SDL_Window *window =
+      SDL_CreateWindow("Raytracing", SDL_WINDOWPOS_CENTERED,
+                       SDL_WINDOWPOS_CENTERED, screen_width, screen_height, 0);
+  if (!window) {
+    std::cerr << "CreateWindow Error:\n" << SDL_GetError() << std::endl;
+    exit(1);
+  }
+  SDL_Renderer *renderer =
+      SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+
+  if (!renderer) {
+    std::cerr << "CreateRenderer Error:\n" << SDL_GetError() << std::endl;
+    exit(1);
+  }
+
+  auto raytracer = Raytracer{
+      .screen_height = screen_height,
+      .screen_width = screen_width,
+      .renderer = renderer,
+      .samples = 50,
+      .cam = Camera(aspect_ratio),
+      .spheres = spheres,
+      .ray_depth = 20,
+      .rand_eng = std::default_random_engine(),
+  };
+  raytrace_frame(raytracer);
+
+  // Render
+  SDL_Event e;
+  bool quit = false;
+  while (!quit) {
+    while (SDL_PollEvent(&e)) {
+      if (e.type == SDL_QUIT) {
+        quit = true;
+      }
+    }
+  }
+  SDL_DestroyWindow(window);
+  // std::cout << "P3\n" << image_width << ' ' << image_height << "\n255\n";
+  // We have to destroy the renderer, same as with the window.
+  SDL_DestroyRenderer(renderer);
+  SDL_Quit();
 }

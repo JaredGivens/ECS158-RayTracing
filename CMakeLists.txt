@@ -10,5 +10,9 @@ add_library(
     geo.c
 )
 
+set(SDL_TEST OFF)
+add_subdirectory(SDL)
+include_directories(${CMAKE_SOURCE_DIR}/SDL/include)
+
 add_executable(Raytracing rt.cc)
-target_link_libraries(Raytracing PRIVATE Geometry)
+target_link_libraries(Raytracing PRIVATE Geometry PRIVATE SDL2::SDL2)
