@@ -26,6 +26,13 @@ typedef union {
 
 typedef union {
   struct {
+    uint8_t x, y, z;
+  };
+  uint8_t ints[3];
+} vecb_t;
+
+typedef union {
+  struct {
     float x, y, z, w;
   };
   float floats[4];
@@ -43,6 +50,7 @@ typedef union {
   float floats[9];
   vecf_t vecs[3];
 } tri_t;
+
 
 #ifdef __cplusplus
 }

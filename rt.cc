@@ -11,32 +11,37 @@
 class Camera {
  public:
   Camera(float vfov, float aspect_ratio) {
-
     auto theta = vfov / 180 * kPi;
-    auto h = tan(theta/2);
+    auto h = tan(theta / 2);
     float viewport_height = 2.0 * h;
     float viewport_width = aspect_ratio * viewport_height;
-    float focal_length = 1.0;
+    focal_length_ = 1.0;
 
-    origin_ = vecf_t{0, 0, 0};
+    pos_ = vecf_t{0, 0, 0};
+    rot_ = quat_t{0, 0, 0, 1};
     hor_ = vecf_t{viewport_width, 0.0, 0.0};
     vert_ = vecf_t{0.0, viewport_height, 0.0};
+    update_transform();
+  }
+
+  void update_transform() {
     vecf_t hor = hor_;
-    vecf_t origin = origin_;
+    vecf_t origin = pos_;
     lower_left_ =
-        sub(origin, add(div(add(hor, vert_), 2), vecf_t{0, 0, focal_length}));
+        sub(origin, add(div(add(hor, vert_), 2), vecf_t{0, 0, focal_length_}));
   }
 
   Ray get_ray(float u, float v) const {
-    vecf_t hor = hor_;
     vecf_t vert = vert_;
-    return Ray{origin_,
-               normalize(sub(add(add(mul(hor, u), mul(vert, v)), lower_left_),
-                             origin_))};
+    vecf_t screen;
+    mul(add(add(mul(screen = hor_, u), mul(vert, v)), lower_left_), rot_);
+    return Ray{pos_, normalize(sub(screen, pos_))};
   }
+  vecf_t pos_;
+  quat_t rot_;
 
  private:
-  vecf_t origin_;
+  float focal_length_;
   vecf_t lower_left_;
   vecf_t hor_;
   vecf_t vert_;
@@ -81,10 +86,10 @@ struct Raytracer {
   std::vector<Sphere> spheres;
   int32_t ray_depth;
   std::default_random_engine rand_eng;
+  vecb_t *screen_buf;
 };
 
 void raytrace_frame(Raytracer &rt) {
-  SDL_RenderClear(rt.renderer);
   for (int32_t j = rt.screen_height - 1; j > -1; --j) {
     for (int32_t i = 0; i < rt.screen_width; ++i) {
       auto pixel_color = vecf_t{0, 0, 0};
@@ -111,13 +116,15 @@ void raytrace_frame(Raytracer &rt) {
             float sin_theta = sqrt(1.0 - cos_theta * cos_theta);
 
             // Use Schlick's approximation for reflectance.
-            auto reflectance = (1-refraction_ratio) / (1+refraction_ratio);
+            auto reflectance = (1 - refraction_ratio) / (1 + refraction_ratio);
             reflectance *= reflectance;
-            reflectance += (1-reflectance)*pow((1 - cos_theta), 5);
+            reflectance += (1 - reflectance) * pow((1 - cos_theta), 5);
 
-            if (refraction_ratio * sin_theta > 1.0 || reflectance > uni_dist01(rt.rand_eng)) {
+            if (refraction_ratio * sin_theta > 1.0 ||
+                reflectance > uni_dist01(rt.rand_eng)) {
               metal_reflect(ray.dir_, intersect);
             } else {
+              // refract
               vecf_t v0 = intersect.normal;
               mul(add(ray.dir_, mul(v0, cos_theta)), refraction_ratio);
               vecf_t parallel = mul(v0 = intersect.normal,
@@ -134,6 +141,7 @@ void raytrace_frame(Raytracer &rt) {
           auto scatter = vecf_t{dist_unit(rt.rand_eng), dist_unit(rt.rand_eng),
                                 dist_unit(rt.rand_eng)};
 
+          // constrain to hemisphere
           if (dot(scatter, intersect.normal) > 0) {
             normalize(add(ray.dir_, mul(scatter, intersect.mat.roughness)));
           } else {
@@ -151,84 +159,141 @@ void raytrace_frame(Raytracer &rt) {
         add(pixel_color, ray_color);
       }
       div(pixel_color, rt.samples);
-      int32_t r = 256 * sqrtf(std::clamp(pixel_color.x, 0.0f, 0.999f));
-      int32_t g = 256 * sqrtf(std::clamp(pixel_color.y, 0.0f, 0.999f));
-      int32_t b = 256 * sqrtf(std::clamp(pixel_color.z, 0.0f, 0.999f));
-      SDL_SetRenderDrawColor(rt.renderer, r, g, b, 0);
-      SDL_RenderDrawPoint(rt.renderer, i, rt.screen_height - j);
+      rt.screen_buf[i * rt.screen_height + j].x =
+          256 * sqrtf(std::clamp(pixel_color.x, 0.0f, 0.999f));
+      rt.screen_buf[i * rt.screen_height + j].y =
+          256 * sqrtf(std::clamp(pixel_color.y, 0.0f, 0.999f));
+      rt.screen_buf[i * rt.screen_height + j].z =
+          256 * sqrtf(std::clamp(pixel_color.z, 0.0f, 0.999f));
     }
-  }
-  SDL_RenderPresent(rt.renderer);
-}
-
-int32_t main() {
-  Material yellow_diff = {
-      vecf_t{.9, .9, .2}, 0, .5, 1, 0,
-  };
-
-  Material blue_metal = {
-      vecf_t{.6, .6, .9}, 1, .5, .1, 0,
-  };
-
-  Material glass = {
-      vecf_t{1, 1, 1}, 0, 1, 0, 1.5,
-  };
-  auto spheres = std::vector<Sphere>();
-  spheres.push_back(Sphere{vecf_t{-1, 0, -1}, 0.5, yellow_diff});
-  spheres.push_back(Sphere{vecf_t{0, 0, -1}, 0.5, blue_metal});
-  spheres.push_back(Sphere{vecf_t{1, 0, -1}, 0.5, glass});
-  spheres.push_back(Sphere{vecf_t{1, 0, -1}, -0.4, glass});
-  spheres.push_back(Sphere{vecf_t{0, -100.5, -1}, 100, yellow_diff});
-
-  float const aspect_ratio = 16.0 / 9.0;
-  int32_t const screen_height = 255;
-  int32_t const screen_width = screen_height * aspect_ratio;
-
-  // Initialize SDL
-  if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-    std::cerr << "SDL Init Error:\n" << SDL_GetError() << std::endl;
-    exit(1);
-  }
-  SDL_Window *window =
-      SDL_CreateWindow("Raytracing", SDL_WINDOWPOS_CENTERED,
-                       SDL_WINDOWPOS_CENTERED, screen_width, screen_height, 0);
-  if (!window) {
-    std::cerr << "CreateWindow Error:\n" << SDL_GetError() << std::endl;
-    exit(1);
-  }
-  SDL_Renderer *renderer =
-      SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
-
-  if (!renderer) {
-    std::cerr << "CreateRenderer Error:\n" << SDL_GetError() << std::endl;
-    exit(1);
-  }
-
-  auto raytracer = Raytracer{
-      .screen_height = screen_height,
-      .screen_width = screen_width,
-      .renderer = renderer,
-      .samples = 50,
-      .cam = Camera(90, aspect_ratio),
-      .spheres = spheres,
-      .ray_depth = 20,
-      .rand_eng = std::default_random_engine(),
-  };
-  raytrace_frame(raytracer);
-
-  // Render
-  SDL_Event e;
-  bool quit = false;
-  while (!quit) {
-    while (SDL_PollEvent(&e)) {
-      if (e.type == SDL_QUIT) {
-        quit = true;
+    SDL_RenderClear(rt.renderer);
+    for (int32_t i = 0; i < rt.screen_width; ++i) {
+      for (int32_t j = 0; j < rt.screen_height; ++j) {
+        int32_t index = i * rt.screen_height + j;
+        SDL_SetRenderDrawColor(rt.renderer, rt.screen_buf[index].x,
+                               rt.screen_buf[index].y, rt.screen_buf[index].z,
+                               0);
+        SDL_RenderDrawPoint(rt.renderer, i, rt.screen_height - j);
       }
     }
+    SDL_RenderPresent(rt.renderer);
   }
-  SDL_DestroyWindow(window);
-  // std::cout << "P3\n" << image_width << ' ' << image_height << "\n255\n";
-  // We have to destroy the renderer, same as with the window.
-  SDL_DestroyRenderer(renderer);
-  SDL_Quit();
 }
+
+  int32_t main() {
+    Material yellow_diff = {
+        vecf_t{.9, .9, .2}, 0, .5, 1, 0,
+    };
+
+    Material blue_metal = {
+        vecf_t{.6, .6, .9}, 1, .5, .1, 0,
+    };
+
+    Material glass = {
+        vecf_t{1, 1, 1}, 0, 1, 0, 1.5,
+    };
+    auto spheres = std::vector<Sphere>();
+    spheres.push_back(Sphere{vecf_t{-1, 0, -1}, 0.5, yellow_diff});
+    spheres.push_back(Sphere{vecf_t{0, 0, -1}, 0.5, blue_metal});
+    spheres.push_back(Sphere{vecf_t{1, 0, -1}, 0.5, glass});
+    spheres.push_back(Sphere{vecf_t{1, 0, -1}, -0.4, glass});
+    spheres.push_back(Sphere{vecf_t{0, -100.5, -1}, 100, yellow_diff});
+
+    float const aspect_ratio = 16.0 / 9.0;
+    int32_t const screen_height = 255;
+    int32_t const screen_width = screen_height * aspect_ratio;
+
+    // Initialize SDL
+    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+      std::cerr << "SDL Init Error:\n" << SDL_GetError() << std::endl;
+      exit(1);
+    }
+    SDL_Window *window = SDL_CreateWindow("Raytracing", SDL_WINDOWPOS_CENTERED,
+                                          SDL_WINDOWPOS_CENTERED, screen_width,
+                                          screen_height, 0);
+    if (!window) {
+      std::cerr << "CreateWindow Error:\n" << SDL_GetError() << std::endl;
+      exit(1);
+    }
+    SDL_Renderer *renderer = SDL_CreateRenderer(
+        window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+
+    if (!renderer) {
+      std::cerr << "CreateRenderer Error:\n" << SDL_GetError() << std::endl;
+      exit(1);
+    }
+
+    auto raytracer = Raytracer{
+        .screen_height = screen_height,
+        .screen_width = screen_width,
+        .renderer = renderer,
+        .samples = 50,
+        .cam = Camera(90, aspect_ratio),
+        .spheres = spheres,
+        .ray_depth = 20,
+        .rand_eng = std::default_random_engine(),
+    };
+    raytracer.screen_buf = new vecb_t[screen_height * screen_width];
+    int32_t frame_throttle = 100000;
+    int32_t frame_cd = frame_throttle;
+
+    // Render
+    SDL_Event e;
+    bool quit = false;
+    while (!quit) {
+      while (SDL_PollEvent(&e)) {
+        switch (e.type) {
+        case SDL_QUIT:
+          quit = true;
+          break;
+        case SDL_KEYDOWN:
+          switch (e.key.keysym.sym) {
+          case SDLK_w:
+            raytracer.cam.pos_.z -= 1;
+            break;
+          case SDLK_s:
+            raytracer.cam.pos_.z += 1;
+            break;
+          case SDLK_a:
+            raytracer.cam.pos_.x -= 1;
+            break;
+          case SDLK_d:
+            raytracer.cam.pos_.x += 1;
+            break;
+          }
+          // KEYS[e.key.keysym.sym] = true;
+          break;
+        case SDL_MOUSEBUTTONDOWN:
+          if (e.button.button == SDL_BUTTON_RIGHT) {
+            SDL_SetRelativeMouseMode(SDL_TRUE);
+          }
+          break;
+        case SDL_MOUSEBUTTONUP:
+          if (e.button.button == SDL_BUTTON_RIGHT) {
+            SDL_SetRelativeMouseMode(SDL_FALSE);
+          }
+          break;
+        case SDL_MOUSEMOTION:
+          if (SDL_GetRelativeMouseMode()) {
+            quat_t q0;
+            from_axis(q0, kUnitY, e.motion.xrel);
+            pre_mul(q0, raytracer.cam.rot_);
+            from_axis(q0, kUnitX, e.motion.yrel);
+            pre_mul(q0, raytracer.cam.rot_);
+          }
+          break;
+        }
+      }
+      raytracer.cam.update_transform();
+      if (++frame_cd > frame_throttle) {
+        raytrace_frame(raytracer);
+        frame_cd = 0;
+      }
+    }
+    SDL_DestroyWindow(window);
+    // std::cout << "P3\n" << image_width << ' ' << image_height << "\n255\n";
+    // We have to destroy the renderer, same as with the window.
+    SDL_DestroyRenderer(renderer);
+    delete[] raytracer.screen_buf;
+    SDL_Quit();
+  }
