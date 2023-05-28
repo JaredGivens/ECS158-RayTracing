@@ -1,13 +1,15 @@
-#include "geo.hh"
 #include <SDL.h>
-#include <iostream>
-#include <random>
 #include <stdint.h>
 #include <unistd.h>
+
+#include <iostream>
+#include <random>
 #include <vector>
 
+#include "geo.hh"
+
 class Camera {
-public:
+ public:
   Camera(float aspect_ratio) {
     float viewport_height = 2.0;
     float viewport_width = aspect_ratio * viewport_height;
@@ -30,7 +32,7 @@ public:
                              origin_))};
   }
 
-private:
+ private:
   vecf_t origin_;
   vecf_t lower_left_;
   vecf_t hor_;
@@ -43,25 +45,27 @@ bool cast_ray(Intersect &record, Ray const &ray,
   record.dist = kInf;
   Intersect intersect;
   for (auto const &sphere : spheres) {
-    if (ray.intersect(intersect, sphere, 0.001, kInf) &&
+    if (ray.intersect(intersect, sphere, 0.0001, kInf) &&
         intersect.dist < record.dist) {
       record = intersect;
     }
   }
-  if (record.dist != kInf) {
-    // record.color = div(add(record.normal, 1), 2);
-    // record.mat.color = vecf_t{0, 0, 0};
-    return true;
-  }
-
-  return false;
+  return record.dist != kInf;
 }
 
-vecf_t refract(vecf_t v, vecf_t n, float refractive_index_ratio) {
-  auto cos_theta = fmin(dot(mul(v, -1), n), 1.0);
-  vecf_t r_out_perp = mul(add(v, mul(n, cos_theta)), refractive_index_ratio);
-  vecf_t r_out_parallel = mul(n, -sqrt(fabs(1.0 - len_sq(r_out_perp))));
+vecf_t refract(vecf_t const &uv, vecf_t const &n, float refraction_ratio) {
+  float cos_theta = -dot(uv, n);
+  vecf_t v0 = n;
+  vecf_t r_out_perp = uv;
+  mul(add(r_out_perp, mul(v0, cos_theta)), refraction_ratio);
+  v0 = n;
+  vecf_t r_out_parallel = mul(v0, -sqrt(fabs(1.0 - len_sq(r_out_perp))));
   return add(r_out_perp, r_out_parallel);
+}
+
+vecf_t &metal_reflect(vecf_t &v, Intersect const &intersect) {
+  return normalize(lerp(reflect(v, intersect.normal), intersect.normal,
+                        1 - intersect.mat.metalness));
 }
 
 auto uni_dist01 = std::uniform_real_distribution<float>(0, 1);
@@ -92,24 +96,41 @@ void raytrace_frame(Raytracer &rt) {
         int32_t depth = 0;
         auto ray_color = vecf_t{1, 1, 1};
         Intersect intersect;
-        // gradient
         while (cast_ray(intersect, ray, rt.spheres) && depth < rt.ray_depth) {
           ray.origin_ = intersect.pos;
 
-          // metalness reflection
-          normalize(lerp(reflect(ray.dir_, intersect.normal), intersect.normal,
-                         1 - intersect.mat.metalness));
+          // this is not neccesary
+          if (intersect.mat.refraction > 0.1) {
+            float refraction_ratio = intersect.front
+                                         ? 1 / intersect.mat.refraction
+                                         : intersect.mat.refraction;
+            float cos_theta = -dot(ray.dir_, intersect.normal);
+            // float sin_theta = sqrt(1.0 - cos_theta * cos_theta);
+            // if (refraction_ratio * sin_theta > 1.0) {
+              // metal_reflect(ray.dir_, intersect);
+            // } else {
+            vecf_t v0 = intersect.normal;
+            mul(add(ray.dir_, mul(v0, cos_theta)), refraction_ratio);
+            vecf_t parallel =
+                mul(v0 = intersect.normal, -sqrt(fabs(1.0 -
+                len_sq(ray.dir_))));
+            add(ray.dir_, parallel);
+            // }
+          } else {
+            metal_reflect(ray.dir_, intersect);
 
-          // roughness fuzzing
-          auto static dist_unit =
-              std::uniform_real_distribution<float>(-1 / sqrtf(2), 1 / sqrt(2));
-          // auto static dist_unit =
-          //     std::uniform_real_distribution<float>(-1, 1);
-          auto scatter = vecf_t{dist_unit(rt.rand_eng), dist_unit(rt.rand_eng),
-                                dist_unit(rt.rand_eng)};
-          mul(normalize(scatter), intersect.mat.roughness);
-          if (!near_zero(add(scatter, ray.dir_))) {
-            ray.dir_ = scatter;
+            // roughness fuzzing
+            auto static dist_unit =
+                std::uniform_real_distribution<float>(-1/sqrtf(2), 1/sqrtf(2));
+            auto scatter =
+                vecf_t{dist_unit(rt.rand_eng), dist_unit(rt.rand_eng),
+                       dist_unit(rt.rand_eng)};
+
+            if (dot(scatter, intersect.normal) > 0) {
+              normalize(add(ray.dir_, mul(scatter, intersect.mat.roughness)));
+            }else {
+              normalize(add(ray.dir_, mul(scatter, -intersect.mat.roughness)));
+            }
           }
 
           mul(ray_color, mul(intersect.mat.color, intersect.mat.specular));
@@ -118,43 +139,37 @@ void raytrace_frame(Raytracer &rt) {
 
         // skybox color
         auto white = vecf_t{1, 1, 1};
-        mul(ray_color, lerp(white, vecf_t{0.5, 0.7, 1}, (ray.dir_.y + 1) / 2));
+        mul(ray_color, lerp(white, vecf_t{0.5, 0.7, 1},(ray.dir_.y + 1) / 2));
+
 
         add(pixel_color, ray_color);
       }
       div(pixel_color, rt.samples);
-      int32_t r = 255.999 * sqrtf(std::clamp(pixel_color.x, 0.0f, 0.999f));
-      int32_t g = 255.999 * sqrtf(std::clamp(pixel_color.y, 0.0f, 0.999f));
-      int32_t b = 255.999 * sqrtf(std::clamp(pixel_color.z, 0.0f, 0.999f));
-      if(near_zero(pixel_color)) {
-        std::cout << pixel_color << std::endl;
-      }
+      int32_t r = 256 * sqrtf(std::clamp(pixel_color.x, 0.0f, 0.999f));
+      int32_t g = 256 * sqrtf(std::clamp(pixel_color.y, 0.0f, 0.999f));
+      int32_t b = 256 * sqrtf(std::clamp(pixel_color.z, 0.0f, 0.999f));
       SDL_SetRenderDrawColor(rt.renderer, r, g, b, 0);
-      SDL_RenderDrawPoint(rt.renderer, rt.screen_width - i,
-                          rt.screen_height - j);
+      SDL_RenderDrawPoint(rt.renderer, i, rt.screen_height - j);
     }
   }
   SDL_RenderPresent(rt.renderer);
 }
 
 int32_t main() {
-
   Material yellow_diff = {
-      vecf_t{1, 1, .2},
-      0,
-      .5,
-      1,
+      vecf_t{.9, .9, .2}, 0, .5, 1, 0,
   };
 
   Material blue_metal = {
-      vecf_t{1, 1, 1},
-      1,
-      .9,
-      0,
+      vecf_t{.6, .6, .9}, 1, .5, .1, 0,
   };
 
+  Material glass = {
+      vecf_t{1, 1, 1}, 0, 1, 0, 1.5,
+  };
   auto spheres = std::vector<Sphere>();
-  spheres.push_back(Sphere{vecf_t{0, 0, -1}, 0.5, yellow_diff});
+  spheres.push_back(Sphere{vecf_t{-1, 0, -1}, 0.5, yellow_diff});
+  spheres.push_back(Sphere{vecf_t{0, 0, -1}, 0.5, glass});
   spheres.push_back(Sphere{vecf_t{1, 0, -1}, 0.5, blue_metal});
   spheres.push_back(Sphere{vecf_t{0, -100.5, -1}, 100, yellow_diff});
 

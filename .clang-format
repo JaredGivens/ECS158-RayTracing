@@ -1,0 +1,6 @@
+BasedOnStyle: Google
+DerivePointerAlignment: false
+PointerAlignment: Right
+IndentCaseLabels: false
+IndentCaseBlocks: true
+SortIncludes: true

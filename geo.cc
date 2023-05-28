@@ -250,36 +250,67 @@ vecf_t Ray::at(float mag) const {
 
 bool Ray::intersect(Intersect &intersect, Sphere const &sphere, float t_min,
                     float t_max) const {
-  vecf_t ab = sphere.center;
-  sub(ab, origin_);
-  float tca = dot(ab, dir_);
-  float d2 = len_sq(ab) - tca * tca;
-  float r2 = sphere.radius * sphere.radius;
+  // vecf_t ab = sphere.center;
+  // sub(ab, origin_);
+  // float tca = dot(ab, dir_);
+  // float d2 = len_sq(ab) - tca * tca;
+  // float r2 = sphere.radius * sphere.radius;
 
-  if (d2 > r2)
-    return false;
+  // if (d2 > r2)
+  //   return false;
 
-  float thc = sqrtf(r2 - d2);
+  // float thc = sqrtf(r2 - d2);
 
-  // t0 = first intersect point - entrance on front of sphere
-  float t0 = tca - thc;
+  // // t0 = first intersect point - entrance on front of sphere
+  // float t0 = tca - thc;
 
-  // t1 = second intersect point - exit point on back of sphere
-  float t1 = tca + thc;
+  // // t1 = second intersect point - exit point on back of sphere
+  // float t1 = tca + thc;
 
-  // test to see if t1 is behind the ray - if so, return null
-  if (t1 < 0)
-    return false;
+  // // test to see if t1 is behind the ray - if so, return null
+  // if (t1 < 0)
+  //   return false;
 
-  intersect.dist = t0 < 0 ? t1 : t0;
-  if (intersect.dist < t_min || intersect.dist > t_max) {
-    return false;
-  }
-  intersect.front = t0 >= 0;
+  // intersect.front = t0 >= 0;
+  // intersect.dist = intersect.front ? t0 : t1;
+  // if (intersect.dist < t_min || intersect.dist > t_max) {
+  //   return false;
+  // }
+  // intersect.pos = at(intersect.dist);
+  // div(sub(intersect.normal = intersect.pos, sphere.center), sphere.radius);
+  // if (!intersect.front) {
+  //   mul(intersect.normal , -1);
+  // }
+  // intersect.mat = sphere.mat;
+  // return true;
+
+   vecf_t oc = origin_;
+   sub(oc, sphere.center);
+    auto half_b = dot(oc, dir_);
+    auto c = len_sq(oc) - sphere.radius*sphere.radius;
+
+    auto discriminant = half_b*half_b - c;
+    if (discriminant < 0) {
+      return false;
+    }
+    auto sqrtd = sqrt(discriminant);
+
+    // Find the nearest root that lies in the acceptable range.
+    auto root = (-half_b - sqrtd);
+    if (root < t_min || t_max < root) {
+        root = (-half_b + sqrtd);
+        if (root < t_min || t_max < root) {
+            return false;
+        }
+    }
+
+  intersect.dist = root;
   intersect.pos = at(intersect.dist);
-  intersect.normal = intersect.pos;
+  div(sub(intersect.normal = intersect.pos, sphere.center), sphere.radius);
+  intersect.front = dot(dir_, intersect.normal) < 0;
+  if(!intersect.front) {
+    mul(intersect.normal, -1);
+  }
   intersect.mat = sphere.mat;
-  div(sub(intersect.normal, sphere.center), sphere.radius);
-
   return true;
 }
