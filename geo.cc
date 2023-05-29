@@ -1,10 +1,11 @@
 #include "geo.hh"
 
+float constexpr kEpsilon = std::numeric_limits<float>::epsilon();
 quat_t &from_units(quat_t &that, vecf_t const &from, vecf_t const &to) {
 
   that.w = dot(from, to) + 1;
 
-  if (that.w < std::numeric_limits<float>::epsilon()) {
+  if (that.w <= kEpsilon) {
     that.w = 0;
 
     if (abs(from.x) < abs(from.z)) {
@@ -86,7 +87,6 @@ quat_t &from_axis(quat_t &that, vecf_t const &axis, float ang) {
   return that;
 }
 
-float constexpr kEpsilon = std::numeric_limits<float>::epsilon();
 bool near_zero(vecf_t const & that) {
   return abs(that.x) <= kEpsilon && abs(that.y) <= kEpsilon && abs(that.z) <= kEpsilon;
 }
