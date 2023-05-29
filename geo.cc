@@ -86,8 +86,9 @@ quat_t &from_axis(quat_t &that, vecf_t const &axis, float ang) {
   return that;
 }
 
+float constexpr kEpsilon = std::numeric_limits<float>::epsilon();
 bool near_zero(vecf_t const & that) {
-  return that.x < 0.0001 && that.y < 0.0001 && that.z < 0.0001;
+  return abs(that.x) < kEpsilon && abs(that.y) < kEpsilon && abs(that.z) < kEpsilon;
 }
 
 tsf_t &copy(tsf_t &that, tsf_t const &t) {
