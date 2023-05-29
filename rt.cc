@@ -47,7 +47,7 @@ class Camera {
   vecf_t vert_;
 };
 
-constexpr float kInf = std::numeric_limits<float>::infinity();
+float constexpr kInf = std::numeric_limits<float>::infinity();
 bool cast_ray(Intersect &record, Ray const &ray,
               std::vector<Sphere> const &spheres) {
   record.dist = kInf;
