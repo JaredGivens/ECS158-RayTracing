@@ -105,8 +105,9 @@ void raytrace_frame(Raytracer &rt) {
         while (cast_ray(intersect, ray, rt.spheres) && depth < rt.ray_depth) {
           ray.origin_ = intersect.pos;
 
-          // this is not neccesary
+
           if (intersect.mat.refraction > 0.1) {
+            // material can refract
             float refraction_ratio = intersect.front
                                          ? 1 / intersect.mat.refraction
                                          : intersect.mat.refraction;
