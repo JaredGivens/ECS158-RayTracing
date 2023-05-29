@@ -88,7 +88,7 @@ quat_t &from_axis(quat_t &that, vecf_t const &axis, float ang) {
 
 float constexpr kEpsilon = std::numeric_limits<float>::epsilon();
 bool near_zero(vecf_t const & that) {
-  return abs(that.x) < kEpsilon && abs(that.y) < kEpsilon && abs(that.z) < kEpsilon;
+  return abs(that.x) <= kEpsilon && abs(that.y) <= kEpsilon && abs(that.z) <= kEpsilon;
 }
 
 tsf_t &copy(tsf_t &that, tsf_t const &t) {
@@ -126,24 +126,11 @@ int32_t closest(vecf_t const &v, tri_t const &t) {
   return rec;
 }
 
-// seg_t &set_seg(seg_t &s, vecf_t const &a, vecf_t const &b) {
-//   s.a = a;
-
-//   s.delta = len(sub(s.dir = b, a));
-//   normalize(s.dir);
-//   // div(add(copy(s.center, a), b), 2);
-
-//   return s;
-// }
-
 std::ostream &operator<<(std::ostream &os, tri_t const &that) {
   os << '[' << that.a << "; " << that.b << "; " << that.c << ']';
   return os;
 }
-// std::ostream &operator<<(std::ostream &os, seg_t const &that) {
-//   os << '[' << that.a << "; " << that.dir << ']';
-//   return os;
-// }
+
 vecf_t compute_bary(tri_t const &tri, vecf_t const &vec) {
   vecf_t v0, v1, v2;
   sub(v0 = tri.c, tri.a);
