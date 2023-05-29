@@ -1,4 +1,3 @@
-#include <SDL.h>
 #include <stdint.h>
 #include <unistd.h>
 
@@ -81,13 +80,11 @@ auto uni_dist01 = std::uniform_real_distribution<float>(0, 1);
 struct Raytracer {
   int32_t screen_height;
   int32_t screen_width;
-  SDL_Renderer *renderer;
   int32_t samples;
   Camera cam;
   std::vector<Sphere> spheres;
   int32_t ray_depth;
   std::default_random_engine rand_eng;
-  vecb_t *screen_buf;
 };
 
 void raytrace_frame(Raytracer &rt) {
@@ -160,24 +157,13 @@ void raytrace_frame(Raytracer &rt) {
         add(pixel_color, ray_color);
       }
       div(pixel_color, rt.samples);
-      rt.screen_buf[i * rt.screen_height + j].x =
-          256 * sqrtf(std::clamp(pixel_color.x, 0.0f, 0.999f));
-      rt.screen_buf[i * rt.screen_height + j].y =
-          256 * sqrtf(std::clamp(pixel_color.y, 0.0f, 0.999f));
-      rt.screen_buf[i * rt.screen_height + j].z =
-          256 * sqrtf(std::clamp(pixel_color.z, 0.0f, 0.999f));
+      std::cout << 
+          256 * sqrtf(std::clamp(pixel_color.x, 0.0f, 0.999f)) << ' ';
+      std::cout << 
+          256 * sqrtf(std::clamp(pixel_color.y, 0.0f, 0.999f)) << ' ';
+      std::cout << 
+          256 * sqrtf(std::clamp(pixel_color.z, 0.0f, 0.999f)) << std::endl;
     }
-    SDL_RenderClear(rt.renderer);
-    for (int32_t i = 0; i < rt.screen_width; ++i) {
-      for (int32_t j = 0; j < rt.screen_height; ++j) {
-        int32_t index = i * rt.screen_height + j;
-        SDL_SetRenderDrawColor(rt.renderer, rt.screen_buf[index].x,
-                               rt.screen_buf[index].y, rt.screen_buf[index].z,
-                               0);
-        SDL_RenderDrawPoint(rt.renderer, i, rt.screen_height - j);
-      }
-    }
-    SDL_RenderPresent(rt.renderer);
   }
 }
 
@@ -204,94 +190,17 @@ void raytrace_frame(Raytracer &rt) {
     int32_t const screen_height = 255;
     int32_t const screen_width = screen_height * aspect_ratio;
 
-    // Initialize SDL
-    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-      std::cerr << "SDL Init Error:\n" << SDL_GetError() << std::endl;
-      exit(1);
-    }
-    SDL_Window *window = SDL_CreateWindow("Raytracing", SDL_WINDOWPOS_CENTERED,
-                                          SDL_WINDOWPOS_CENTERED, screen_width,
-                                          screen_height, 0);
-    if (!window) {
-      std::cerr << "CreateWindow Error:\n" << SDL_GetError() << std::endl;
-      exit(1);
-    }
-    SDL_Renderer *renderer = SDL_CreateRenderer(
-        window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-
-    if (!renderer) {
-      std::cerr << "CreateRenderer Error:\n" << SDL_GetError() << std::endl;
-      exit(1);
-    }
-
     auto raytracer = Raytracer{
         .screen_height = screen_height,
         .screen_width = screen_width,
-        .renderer = renderer,
         .samples = 50,
         .cam = Camera(90, aspect_ratio),
         .spheres = spheres,
         .ray_depth = 20,
         .rand_eng = std::default_random_engine(),
     };
-    raytracer.screen_buf = new vecb_t[screen_height * screen_width];
 
-    // Render
-    SDL_Event e;
-    bool quit = false;
-    while (!quit) {
-      while (SDL_PollEvent(&e)) {
-        switch (e.type) {
-        case SDL_QUIT:
-          quit = true;
-          break;
-        case SDL_KEYDOWN:
-          switch (e.key.keysym.sym) {
-          case SDLK_w:
-            raytracer.cam.pos_.z -= 1;
-            break;
-          case SDLK_s:
-            raytracer.cam.pos_.z += 1;
-            break;
-          case SDLK_a:
-            raytracer.cam.pos_.x -= 1;
-            break;
-          case SDLK_d:
-            raytracer.cam.pos_.x += 1;
-            break;
-          case SDLK_f:
-            raytracer.cam.update_transform();
-            raytrace_frame(raytracer);
-            break;
-          }
-          // KEYS[e.key.keysym.sym] = true;
-          break;
-        case SDL_MOUSEBUTTONDOWN:
-          if (e.button.button == SDL_BUTTON_RIGHT) {
-            SDL_SetRelativeMouseMode(SDL_TRUE);
-          }
-          break;
-        case SDL_MOUSEBUTTONUP:
-          if (e.button.button == SDL_BUTTON_RIGHT) {
-            SDL_SetRelativeMouseMode(SDL_FALSE);
-          }
-          break;
-        case SDL_MOUSEMOTION:
-          if (SDL_GetRelativeMouseMode()) {
-            quat_t q0;
-            from_axis(q0, kUnitY, e.motion.xrel);
-            pre_mul(raytracer.cam.rot_, q0);
-            from_axis(q0, kUnitX, e.motion.yrel);
-            pre_mul(raytracer.cam.rot_, q0);
-          }
-          break;
-        }
-      }
-    }
-    SDL_DestroyWindow(window);
-    // std::cout << "P3\n" << image_width << ' ' << image_height << "\n255\n";
-    // We have to destroy the renderer, same as with the window.
-    SDL_DestroyRenderer(renderer);
-    delete[] raytracer.screen_buf;
-    SDL_Quit();
+    std::cout << "P3\n" << screen_width << ' ' << screen_height << "\n255\n";
+    raytrace_frame(raytracer);
+
   }
