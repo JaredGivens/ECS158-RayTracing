@@ -3,7 +3,10 @@
 #include "Walnut/Image.h"
 
 #include <memory>
-#include <glm/glm.hpp>
+
+#include "cuda_runtime.h"
+#include "device_launch_parameters.h"
+#include "CudaRender.h"
 
 class Renderer
 {
@@ -14,8 +17,6 @@ public:
 	void Render();
 
 	std::shared_ptr<Walnut::Image> GetFinalImage() const { return m_FinalImage; }
-private:
-	uint32_t PerPixel(glm::vec2 coord);
 private:
 	std::shared_ptr<Walnut::Image> m_FinalImage;
 	uint32_t* m_ImageData = nullptr;
