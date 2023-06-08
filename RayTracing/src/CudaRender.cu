@@ -4,34 +4,37 @@
 
 
 typedef uint32_t u32;
-__global__ void renderKernel(u32* device_image_data, u32 width, u32 height) {
+__global__ void renderKernel(u32* device_image_data, u32 width, u32 height, vec3 cameraPosition, glm::mat4 inverseProjection, glm::mat4 inverseView) {
+
     //printf("From cuda code\n");
     u32 x = threadIdx.x + blockIdx.x * blockDim.x;
     u32 y = threadIdx.y + blockIdx.y * blockDim.y;
     if ((x >= width) || (y>= height)) return;
 
-    vec3 coord{(float)x / (float)width, (float)y / (float)height,.0};
+    //camera code 
+    glm::vec2 coord = { (float)x / (float)width, (float)y / (float)height };
     coord = coord * 2.0f - 1.0f; // -1 -> 1
-    Color color = CudaRender::PerPixel(coord);
+    glm::vec4 target = inverseProjection * glm::vec4(coord.x, coord.y, 1, 1);
+    glm::vec3 rayDirection = glm::vec3(inverseView * glm::vec4(glm::normalize(glm::vec3(target) / target.w), 0)); // World space
+
+    Ray ray; 
+    ray.Origin = cameraPosition;
+    ray.Direction = rayDirection;
+    Color color = CudaRender::TraceRay(ray);
+
     color = color.Clamp(0, 1);
     device_image_data[x + y * width] = color.ConvertToRGBA();
     //if(coord[1] > 0.5f) device_image_data[x + y * width] = 0xffffffff;
 }
 
-cudaError_t addWithCuda(u32* out, u32 width, u32 height);
+cudaError_t addWithCuda(u32* out, u32 width, u32 height, const Camera& camera);
 
-void CudaRender::Render(uint32_t width, uint32_t height, uint32_t* host_image_data) {
-	addWithCuda(host_image_data, width, height);
-	//uint32_t* shared_image_data = NULL;
-
-	std::cout << "Calling cudaDeviceSynchronize." << std::endl;
-	std::cout << "returned from cudaDeviceSynchronize." << std::endl;
+void CudaRender::Render(uint32_t width, uint32_t height, uint32_t* host_image_data, const Camera& camera) {
+	addWithCuda(host_image_data, width, height, camera);
 }
 
-__device__ Color CudaRender::PerPixel(vec3 coord)
+__device__ Color CudaRender::TraceRay(const Ray& ray)
 {
-	vec3 rayOrigin(0.0f, 0.0f, 1.0f);
-	vec3 rayDirection(coord[0], coord[1], -1.0f);
 	float radius = 0.5f;
 	// rayDirection = glm::normalize(rayDirection);
 
@@ -42,9 +45,9 @@ __device__ Color CudaRender::PerPixel(vec3 coord)
 	// r = radius
 	// t = hit distance
 
-	float a = dot(rayDirection, rayDirection);
-	float b = 2 * dot(rayOrigin, rayDirection);
-	float c = dot(rayOrigin, rayOrigin) - radius * radius;
+    float a = glm::dot(ray.Direction, ray.Direction);
+    float b = 2.0f * glm::dot(ray.Origin, ray.Direction);
+    float c = glm::dot(ray.Origin, ray.Origin) - radius * radius;
 
 	// Quadratic forumula discriminant:
 	// b^2 - 4ac
@@ -59,22 +62,20 @@ __device__ Color CudaRender::PerPixel(vec3 coord)
     float closestT = (-b - sqrt(discriminant)) / (2.0f * a);
     float t0 = (-b + sqrt(discriminant)) / (2.0f * a); // Second hit distance (currently unused)
 
-    vec3 hitPoint = rayOrigin + rayDirection * closestT;
-    vec3 normal = hitPoint;
-    normal.make_unit_vector();
+    glm::vec3 hitPoint = ray.Origin + ray.Direction * closestT;
+    vec3 normal = glm::normalize(hitPoint);
 
-    vec3 lightDir = vec3(-1, -0, -1);
-    lightDir.make_unit_vector();
+    vec3 lightDir = glm::normalize(vec3(-1, -0, -1));
     float lightIntensity = std::fmax(0.0f, dot(normal, -lightDir)); // == cos(angle)
 
     vec3 sphereColor(1, 0, 1);
     sphereColor *= lightIntensity;
 
-    return Color(sphereColor.r(), sphereColor.g(), sphereColor.b(), 1.0f);
+    return Color(sphereColor.r, sphereColor.g, sphereColor.b, 1.0f);
 }
 
 //writes to out array using cuda
-cudaError_t addWithCuda(u32* out, u32 width, u32 height)
+cudaError_t addWithCuda(u32* out, u32 width, u32 height, const Camera& camera)
 {
     u32 problem_size = width * height;
     uint32_t* dev_c = 0;
@@ -122,7 +123,10 @@ cudaError_t addWithCuda(u32* out, u32 width, u32 height)
     // Render our buffer
     dim3 blocks(width / tx, height/ ty);
     dim3 threads(tx, ty);
-    renderKernel << <blocks, threads>> > (dev_c, width, height);
+    auto inverseProjection = camera.GetInverseProjection();
+    auto inverseView = camera.GetInverseView();
+    auto cameraPos = camera.GetPosition();
+    renderKernel << <blocks, threads>> > (dev_c, width, height, cameraPos, inverseProjection, inverseView);
 
     // Check for any errors launching the kernel
     cudaStatus = cudaGetLastError();
