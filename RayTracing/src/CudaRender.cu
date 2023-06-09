@@ -3,6 +3,12 @@
 #include <stdio.h>
 #include <math.h>
 
+vec4* dev_accumulation = nullptr;
+u32 dev_acc_pixel_count = 0;
+u32* dev_framebuffer = nullptr; // the frame buffer that device writes to
+
+
+
 const __device__ float CudaRenderInfo::Float() const
 {
         float rand =  (float)curand_uniform(curandState);
@@ -19,7 +25,7 @@ const __device__ glm::vec3 CudaRenderInfo::randVec3(float min, float max) const
     return glm::vec3(Float() * (max - min) + min, Float() * (max - min) + min, Float() * (max - min) + min);
 }
 
-__global__ void renderKernel(u32* device_image_data, vec4* dev_accumulation, Sphere* spheres, u32 sphere_count, Material* materials, u32 materials_count, u32 width, u32 height, vec3 cameraPosition, glm::mat4 inverseProjection, glm::mat4 inverseView, vec3 skycolor, u32 frameindex) {
+__global__ void raytraceKernel(u32* device_image_data, vec4* dev_accumulation, Sphere* spheres, u32 sphere_count, Material* materials, u32 materials_count, u32 width, u32 height, vec3 cameraPosition, glm::mat4 inverseProjection, glm::mat4 inverseView, vec3 skycolor, u32 frameindex) {
     //printf("From cuda code\n");
     u32 x = threadIdx.x + blockIdx.x * blockDim.x;
     u32 y = threadIdx.y + blockIdx.y * blockDim.y;
@@ -86,7 +92,7 @@ __device__ Color CudaRender::PerPixel(uint32_t x, uint32_t y, const CudaRenderIn
 	glm::vec3 color(0.0f);
 	float multiplier = 1.0f;
 
-	int bounces = 50;
+	int bounces = 8;
 	for (int i = 0; i < bounces; i++)
 	{
 		CudaRender::HitPayload payload = CudaRender::TraceRay(ray, renderInfo);
@@ -195,8 +201,6 @@ CudaRender::HitPayload CudaRender::Miss(const Ray& ray, const CudaRenderInfo& re
 //writes to out array using cuda
 cudaError CudaRender::Render(u32 width, u32 height, u32* host_image_data, vec4* host_accumulation, const Scene& scene, const Camera& camera) {
     u32 pixel_count = width * height;
-    u32* dev_framebuffer = nullptr; // the frame buffer that device writes to
-    vec4* dev_accumulation = nullptr;
     Sphere* dev_spheres = nullptr;
     Material* dev_materials = nullptr;
     u32 sphere_count = scene.Spheres.size();
@@ -210,16 +214,30 @@ cudaError CudaRender::Render(u32 width, u32 height, u32* host_image_data, vec4* 
         goto Error;
     }
 
-    // Allocate GPU buffers  (3 input, 1 output).
-    cudaStatus = cudaMalloc((void**)&dev_framebuffer, pixel_count * sizeof(u32));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc (dev_framebuffer) failed!");
-        goto Error;
+    
+    //handle window resizing.
+    if(pixel_count != dev_acc_pixel_count){
+        cudaFree(dev_framebuffer);
+        cudaFree(dev_accumulation);
+        dev_acc_pixel_count = 0;
+        dev_accumulation = nullptr;
     }
-    cudaStatus = cudaMalloc((void**)&dev_accumulation, pixel_count * sizeof(vec4));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc (dev_accumulation) failed!");
-        goto Error;
+
+    // Allocate GPU buffers  (3 input, 1 output).
+    if(nullptr == dev_accumulation){
+        dev_acc_pixel_count = pixel_count;
+        cudaStatus = cudaMalloc((void**)&dev_accumulation, pixel_count * sizeof(vec4));
+        if (cudaStatus != cudaSuccess) {
+            fprintf(stderr, "cudaMalloc (dev_accumulation) failed!");
+            goto Error;
+        }
+
+        cudaStatus = cudaMalloc((void**)&dev_framebuffer, pixel_count * sizeof(u32));
+        if (cudaStatus != cudaSuccess) {
+            fprintf(stderr, "cudaMalloc (dev_framebuffer) failed!");
+            goto Error;
+        }
+
     }
 
     cudaStatus = cudaMalloc((void**)&dev_spheres, sphere_count * sizeof(Sphere));
@@ -253,11 +271,11 @@ cudaError CudaRender::Render(u32 width, u32 height, u32* host_image_data, vec4* 
        fprintf(stderr, "cudaMemcpy (scene.Spheres) failed!");
        goto Error;
     }
-    cudaStatus = cudaMemcpy(dev_accumulation, host_accumulation, pixel_count * sizeof(vec4), cudaMemcpyHostToDevice);
-    if (cudaStatus != cudaSuccess) {
-       fprintf(stderr, "cudaMemcpy (accumulation) failed!");
-       goto Error;
-    }
+    // cudaStatus = cudaMemcpy(dev_accumulation, host_accumulation, pixel_count * sizeof(vec4), cudaMemcpyHostToDevice);
+    // if (cudaStatus != cudaSuccess) {
+    //    fprintf(stderr, "cudaMemcpy (accumulation) failed!");
+    //    goto Error;
+    // }
     
     //copy materials array to gpu buffers
     cudaStatus = cudaMemcpy(dev_materials, &scene.Materials.front(), materials_count * sizeof(Material), cudaMemcpyHostToDevice);
@@ -277,7 +295,7 @@ cudaError CudaRender::Render(u32 width, u32 height, u32* host_image_data, vec4* 
     auto inverseProjection = camera.GetInverseProjection();
     auto inverseView = camera.GetInverseView();
     auto cameraPos = camera.GetPosition();
-    renderKernel <<<blocks, threads>>> (dev_framebuffer, dev_accumulation, dev_spheres, sphere_count, dev_materials, materials_count, width, height, cameraPos, inverseProjection, inverseView, scene.skycolor, scene.frameindex);
+    raytraceKernel <<<blocks, threads>>> (dev_framebuffer, dev_accumulation, dev_spheres, sphere_count, dev_materials, materials_count, width, height, cameraPos, inverseProjection, inverseView, scene.skycolor, scene.frameindex);
 
     // Check for any errors launching the kernel
     cudaStatus = cudaGetLastError();
@@ -300,15 +318,13 @@ cudaError CudaRender::Render(u32 width, u32 height, u32* host_image_data, vec4* 
         fprintf(stderr, "cudaMemcpy failed!");
         goto Error;
     }
-    cudaStatus = cudaMemcpy(host_accumulation, dev_accumulation, pixel_count * sizeof(vec4), cudaMemcpyDeviceToHost);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
+    // cudaStatus = cudaMemcpy(host_accumulation, dev_accumulation, pixel_count * sizeof(vec4), cudaMemcpyDeviceToHost);
+    // if (cudaStatus != cudaSuccess) {
+    //     fprintf(stderr, "cudaMemcpy failed!");
+    //     goto Error;
+    // }
 
 Error:
-    cudaFree(dev_framebuffer);
-    cudaFree(dev_accumulation);
     cudaFree(dev_spheres);
     cudaFree(dev_materials);
 
