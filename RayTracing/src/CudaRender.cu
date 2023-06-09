@@ -19,11 +19,11 @@ const __device__ glm::vec3 CudaRenderInfo::randVec3(float min, float max) const
     return glm::vec3(Float() * (max - min) + min, Float() * (max - min) + min, Float() * (max - min) + min);
 }
 
-__global__ void renderKernel(u32* device_image_data, Sphere* spheres, u32 sphere_count, Material* materials, u32 materials_count, u32 width, u32 height, vec3 cameraPosition, glm::mat4 inverseProjection, glm::mat4 inverseView, vec3 skycolor) {
+__global__ void renderKernel(u32* device_image_data, vec4* dev_accumulation, Sphere* spheres, u32 sphere_count, Material* materials, u32 materials_count, u32 width, u32 height, vec3 cameraPosition, glm::mat4 inverseProjection, glm::mat4 inverseView, vec3 skycolor, u32 frameindex) {
     //printf("From cuda code\n");
     u32 x = threadIdx.x + blockIdx.x * blockDim.x;
     u32 y = threadIdx.y + blockIdx.y * blockDim.y;
-
+    u32 fb_index = x + y * width; //index in framebuffer/accumulation buffer
     //rand
     curandState state;
     curand_init(clock64() * x * height + y, 912839, 0, &state);
@@ -43,22 +43,32 @@ __global__ void renderKernel(u32* device_image_data, Sphere* spheres, u32 sphere
     cudaRenderInfo.skycolor = skycolor;
 
     //debug code
-    //if (x != 0 || y != 0) return;
+
     //auto sphereColor = spheres[0].Albedo;
     //printf("Albedo1: r%f g%f b%f a%f\n", sphereColor.r, sphereColor.g, sphereColor.b, 1.0f);
     //sphereColor = spheres[1].Albedo;
     //printf("Albedo0: r%f g%f b%f a%f\n", sphereColor.r, sphereColor.g, sphereColor.b, 1.0f);
 
     Color color = CudaRender::PerPixel(x, y, cudaRenderInfo);
-    color = color.Clamp(0, 1);
-    device_image_data[x + y * width] = color.ConvertToRGBA();
+    //if (x == 0 && y == 0) {
+    //    printf("frameindex: %d, prev accdata: %x\n", frameindex, Color{dev_accumulation[fb_index]}.ConvertToRGBA());
+    //}
+
+    //printf("frameindex: %d", frameindex);
+    //reset accumlation if frameindex == 1;
+    if(frameindex == 1)
+    {
+        dev_accumulation[fb_index] = vec4{0.f}; // hopefuly sets to zero matrix?
+    }
+    dev_accumulation[fb_index] += color.to_vec4();
+
+    glm::vec4 accumulatedColor = dev_accumulation[fb_index];
+    accumulatedColor /= (float)frameindex;
+
+    accumulatedColor = glm::clamp(accumulatedColor, glm::vec4(0.0f), glm::vec4(1.0f));
+    Color accColor = Color{accumulatedColor};
+    device_image_data[fb_index] = accColor.ConvertToRGBA();
     //if(coord[1] > 0.5f) device_image_data[x + y * width] = 0xffffffff;
-}
-
-cudaError_t addWithCuda(u32* out, u32 width, u32 height, const Scene& scene, const Camera& camera);
-
-void CudaRender::Render(uint32_t width, uint32_t height, uint32_t* host_image_data, const Scene& scene, const Camera& camera) {
-	addWithCuda(host_image_data, width, height, scene, camera);
 }
 
 __device__ Color CudaRender::PerPixel(uint32_t x, uint32_t y, const CudaRenderInfo& renderInfo)
@@ -183,12 +193,12 @@ CudaRender::HitPayload CudaRender::Miss(const Ray& ray, const CudaRenderInfo& re
 }
 
 //writes to out array using cuda
-cudaError_t addWithCuda(u32* out, u32 width, u32 height, const Scene& scene, const Camera& camera)
-{
-    u32 problem_size = width * height;
-    uint32_t* dev_c = 0; // the frame buffer that device writes to
-    Sphere* dev_spheres = 0;
-    Material* dev_materials = 0;
+cudaError CudaRender::Render(u32 width, u32 height, u32* host_image_data, vec4* host_accumulation, const Scene& scene, const Camera& camera) {
+    u32 pixel_count = width * height;
+    u32* dev_framebuffer = nullptr; // the frame buffer that device writes to
+    vec4* dev_accumulation = nullptr;
+    Sphere* dev_spheres = nullptr;
+    Material* dev_materials = nullptr;
     u32 sphere_count = scene.Spheres.size();
     u32 materials_count = scene.Materials.size();
     cudaError_t cudaStatus;
@@ -200,10 +210,15 @@ cudaError_t addWithCuda(u32* out, u32 width, u32 height, const Scene& scene, con
         goto Error;
     }
 
-    // Allocate GPU buffers for three vectors (two input, one output)    .
-    cudaStatus = cudaMalloc((void**)&dev_c, problem_size * sizeof(uint32_t));
+    // Allocate GPU buffers  (3 input, 1 output).
+    cudaStatus = cudaMalloc((void**)&dev_framebuffer, pixel_count * sizeof(u32));
     if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc (dev_c) failed!");
+        fprintf(stderr, "cudaMalloc (dev_framebuffer) failed!");
+        goto Error;
+    }
+    cudaStatus = cudaMalloc((void**)&dev_accumulation, pixel_count * sizeof(vec4));
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "cudaMalloc (dev_accumulation) failed!");
         goto Error;
     }
 
@@ -235,7 +250,12 @@ cudaError_t addWithCuda(u32* out, u32 width, u32 height, const Scene& scene, con
     // Copy spheres array from host memory to GPU buffers.
     cudaStatus = cudaMemcpy(dev_spheres, &scene.Spheres.front(), sphere_count * sizeof(Sphere), cudaMemcpyHostToDevice);
     if (cudaStatus != cudaSuccess) {
-       fprintf(stderr, "cudaMemcpy failed!");
+       fprintf(stderr, "cudaMemcpy (scene.Spheres) failed!");
+       goto Error;
+    }
+    cudaStatus = cudaMemcpy(dev_accumulation, host_accumulation, pixel_count * sizeof(vec4), cudaMemcpyHostToDevice);
+    if (cudaStatus != cudaSuccess) {
+       fprintf(stderr, "cudaMemcpy (accumulation) failed!");
        goto Error;
     }
     
@@ -247,8 +267,8 @@ cudaError_t addWithCuda(u32* out, u32 width, u32 height, const Scene& scene, con
     }
 
     // Launch a kernel on the GPU with one thread for each element.
-    int blockSize = 1024;
-    int numBlocks = (problem_size + blockSize - 1) / blockSize;
+    //int blockSize = 1024;
+    //int numBlocks = (pixel_count + blockSize - 1) / blockSize;
     int tx = 8;
     int ty = 8;
     // Render our buffer
@@ -257,7 +277,7 @@ cudaError_t addWithCuda(u32* out, u32 width, u32 height, const Scene& scene, con
     auto inverseProjection = camera.GetInverseProjection();
     auto inverseView = camera.GetInverseView();
     auto cameraPos = camera.GetPosition();
-    renderKernel <<<blocks, threads>>> (dev_c, dev_spheres, sphere_count, dev_materials, materials_count, width, height, cameraPos, inverseProjection, inverseView, scene.skycolor);
+    renderKernel <<<blocks, threads>>> (dev_framebuffer, dev_accumulation, dev_spheres, sphere_count, dev_materials, materials_count, width, height, cameraPos, inverseProjection, inverseView, scene.skycolor, scene.frameindex);
 
     // Check for any errors launching the kernel
     cudaStatus = cudaGetLastError();
@@ -274,15 +294,23 @@ cudaError_t addWithCuda(u32* out, u32 width, u32 height, const Scene& scene, con
         goto Error;
     }
 
-    // Copy output vector from GPU buffer to host memory.
-    cudaStatus = cudaMemcpy(out, dev_c, problem_size * sizeof(u32), cudaMemcpyDeviceToHost);
+    // Copy outputs from GPU buffer to host memory.
+    cudaStatus = cudaMemcpy(host_image_data, dev_framebuffer, pixel_count * sizeof(u32), cudaMemcpyDeviceToHost);
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "cudaMemcpy failed!");
+        goto Error;
+    }
+    cudaStatus = cudaMemcpy(host_accumulation, dev_accumulation, pixel_count * sizeof(vec4), cudaMemcpyDeviceToHost);
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaMemcpy failed!");
         goto Error;
     }
 
 Error:
-    cudaFree(dev_c);
+    cudaFree(dev_framebuffer);
+    cudaFree(dev_accumulation);
+    cudaFree(dev_spheres);
+    cudaFree(dev_materials);
 
     return cudaStatus;
 }

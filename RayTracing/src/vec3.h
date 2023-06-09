@@ -18,6 +18,12 @@ private:
         else return value;
     }
 public:
+    __device__ Color(vec4 rgba) {
+        r = rgba.r;
+        g = rgba.g;
+        b = rgba.b;
+        a = rgba.a;
+    }
     __device__ Color(float r, float g, float b, float a) {
         this->r = r;
         this->g = g;
@@ -29,6 +35,9 @@ public:
         this->g = g;
         this->b = b;
         this->a = a;
+    }
+    __device__ vec4 to_vec4() {
+        return vec4{ r,g,b,a };
     }
     float r;
     float g;

@@ -3,6 +3,7 @@
 #include <glm/glm.hpp>
 
 #include <vector>
+#include "CudaRender.h"
 
 struct Material
 {
@@ -21,6 +22,7 @@ struct Sphere
 
 struct Scene
 {
+	uint32_t frameindex = 1;
 	glm::vec3 skycolor = glm::vec3(0.2f, 0.2f, 0.2f);
 	std::vector<Sphere> Spheres;
     std::vector<Material> Materials;
