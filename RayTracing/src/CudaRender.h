@@ -6,11 +6,21 @@
 #include "Camera.h"
 #include "Ray.h"
 #include "Scene.h"
+#include "curand_kernel.h"
+
+#include "Walnut/Random.h"
 
 typedef uint32_t u32;
 
 class CudaRenderInfo {
 public:
+	const __device__ glm::vec3 randVec3(float min, float max) const;
+	const __device__ float Float() const ;
+	const __device__ glm::vec3 randVec3() const;
+
+public:
+	const Material* materials;
+	u32 materials_count; 
 	const Sphere* spheres;
 	u32 sphere_count;
 	u32 width;
@@ -18,6 +28,7 @@ public:
 	vec3 cameraPosition;
 	glm::mat4 inverseProjection;
 	glm::mat4 inverseView;
+	curandState* curandState;
 };
 
 class CudaRender
