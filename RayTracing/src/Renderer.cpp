@@ -3,6 +3,7 @@
 
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
+
 using std::cout, std::endl;
 
 void Renderer::OnResize(uint32_t width, uint32_t height)
@@ -23,14 +24,14 @@ void Renderer::OnResize(uint32_t width, uint32_t height)
 	m_ImageData = new uint32_t[width * height];
 }
 
-void Renderer::Render(const Camera& camera)
+void Renderer::Render(const Scene& scene, const Camera& camera)
 {
 	Ray ray;
 	ray.Origin = camera.GetPosition();
 
 	auto image_buf_size = sizeof(uint32_t) * m_FinalImage->GetWidth() * m_FinalImage->GetHeight();
 	memset(m_ImageData, 0, image_buf_size);
-	CudaRender::Render(m_FinalImage->GetWidth(), m_FinalImage->GetHeight(), m_ImageData, camera);
+	CudaRender::Render(m_FinalImage->GetWidth(), m_FinalImage->GetHeight(), m_ImageData, scene, camera);
 	cout << "width: " << m_FinalImage->GetWidth() << endl;
 	//for (uint32_t y = 0; y < m_FinalImage->GetHeight(); y++)
 	//{

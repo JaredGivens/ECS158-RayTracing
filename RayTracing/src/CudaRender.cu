@@ -4,12 +4,20 @@
 
 
 typedef uint32_t u32;
-__global__ void renderKernel(u32* device_image_data, u32 width, u32 height, vec3 cameraPosition, glm::mat4 inverseProjection, glm::mat4 inverseView) {
+__global__ void renderKernel(u32* device_image_data, Sphere* spheres, u32 sphere_count, u32 width, u32 height, vec3 cameraPosition, glm::mat4 inverseProjection, glm::mat4 inverseView) {
 
     //printf("From cuda code\n");
     u32 x = threadIdx.x + blockIdx.x * blockDim.x;
     u32 y = threadIdx.y + blockIdx.y * blockDim.y;
     if ((x >= width) || (y>= height)) return;
+
+    //debug code
+    //if (x != 0 || y != 0) return;
+    //auto sphereColor = spheres[0].Albedo;
+    //printf("Albedo1: r%f g%f b%f a%f\n", sphereColor.r, sphereColor.g, sphereColor.b, 1.0f);
+    //sphereColor = spheres[1].Albedo;
+    //printf("Albedo0: r%f g%f b%f a%f\n", sphereColor.r, sphereColor.g, sphereColor.b, 1.0f);
+
 
     //camera code 
     glm::vec2 coord = { (float)x / (float)width, (float)y / (float)height };
@@ -20,66 +28,87 @@ __global__ void renderKernel(u32* device_image_data, u32 width, u32 height, vec3
     Ray ray; 
     ray.Origin = cameraPosition;
     ray.Direction = rayDirection;
-    Color color = CudaRender::TraceRay(ray);
+    Color color = CudaRender::TraceRay(spheres, sphere_count, ray);
 
     color = color.Clamp(0, 1);
     device_image_data[x + y * width] = color.ConvertToRGBA();
     //if(coord[1] > 0.5f) device_image_data[x + y * width] = 0xffffffff;
 }
 
-cudaError_t addWithCuda(u32* out, u32 width, u32 height, const Camera& camera);
+cudaError_t addWithCuda(u32* out, u32 width, u32 height, const Scene& scene, const Camera& camera);
 
-void CudaRender::Render(uint32_t width, uint32_t height, uint32_t* host_image_data, const Camera& camera) {
-	addWithCuda(host_image_data, width, height, camera);
+void CudaRender::Render(uint32_t width, uint32_t height, uint32_t* host_image_data, const Scene& scene, const Camera& camera) {
+	addWithCuda(host_image_data, width, height, scene, camera);
 }
 
-__device__ Color CudaRender::TraceRay(const Ray& ray)
+__device__ Color CudaRender::TraceRay(const Sphere* spheres, uint32_t sphere_count, const Ray& ray)
 {
-	float radius = 0.5f;
-	// rayDirection = glm::normalize(rayDirection);
-
 	// (bx^2 + by^2)t^2 + (2(axbx + ayby))t + (ax^2 + ay^2 - r^2) = 0
 	// where
 	// a = ray origin
 	// b = ray direction
 	// r = radius
 	// t = hit distance
+	if (sphere_count == 0)
+		return Color(0, 0, 0, 1, 0);
 
-    float a = glm::dot(ray.Direction, ray.Direction);
-    float b = 2.0f * glm::dot(ray.Origin, ray.Direction);
-    float c = glm::dot(ray.Origin, ray.Origin) - radius * radius;
+	const Sphere* closestSphere = nullptr;
+	float hitDistance = FLT_MAX;
 
-	// Quadratic forumula discriminant:
-	// b^2 - 4ac
+	for (u32 i=0; i<sphere_count; i++)
+	{
+        const Sphere& sphere = spheres[i];
+		glm::vec3 origin = ray.Origin - sphere.Position;
 
-	float discriminant = b * b - 4.0f * a * c;
-    if (discriminant < 0.0f)
-        return Color(0, 0, 0, 1);
+		float a = glm::dot(ray.Direction, ray.Direction);
+		float b = 2.0f * glm::dot(origin, ray.Direction);
+		float c = glm::dot(origin, origin) - sphere.Radius * sphere.Radius;
 
-    // Quadratic formula:
-    // (-b +- sqrt(discriminant)) / 2a
+		// Quadratic forumula discriminant:
+		// b^2 - 4ac
 
-    float closestT = (-b - sqrt(discriminant)) / (2.0f * a);
-    float t0 = (-b + sqrt(discriminant)) / (2.0f * a); // Second hit distance (currently unused)
+		float discriminant = b * b - 4.0f * a * c;
+		if (discriminant < 0.0f)
+			continue;
 
-    glm::vec3 hitPoint = ray.Origin + ray.Direction * closestT;
+		// Quadratic formula:
+		// (-b +- sqrt(discriminant)) / 2a
+
+		// float t0 = (-b + glm::sqrt(discriminant)) / (2.0f * a); // Second hit distance (currently unused)
+		float closestT = (-b - glm::sqrt(discriminant)) / (2.0f * a);
+		if (closestT < hitDistance)
+		{
+			hitDistance = closestT;
+			closestSphere = &sphere;
+		}
+	}
+
+    if (closestSphere == nullptr)
+        return Color(0.0f, 0.0f, 0.0f, 1.0f, 0);
+
+	glm::vec3 origin = ray.Origin - closestSphere->Position;
+	glm::vec3 hitPoint = origin + ray.Direction * hitDistance;
     vec3 normal = glm::normalize(hitPoint);
 
     vec3 lightDir = glm::normalize(vec3(-1, -0, -1));
     float lightIntensity = std::fmax(0.0f, dot(normal, -lightDir)); // == cos(angle)
 
-    vec3 sphereColor(1, 0, 1);
+	glm::vec3 sphereColor = closestSphere->Albedo;
     sphereColor *= lightIntensity;
 
     return Color(sphereColor.r, sphereColor.g, sphereColor.b, 1.0f);
 }
 
 //writes to out array using cuda
-cudaError_t addWithCuda(u32* out, u32 width, u32 height, const Camera& camera)
+cudaError_t addWithCuda(u32* out, u32 width, u32 height, const Scene& scene, const Camera& camera)
 {
     u32 problem_size = width * height;
-    uint32_t* dev_c = 0;
+    uint32_t* dev_c = 0; // the frame buffer that device writes to
+    Sphere* dev_spheres = 0;
+    u32 sphere_count = scene.Spheres.size();
     cudaError_t cudaStatus;
+
+    std::cout << "Sphere count: " << sphere_count << std::endl;
 
     // Choose which GPU to run on, change this on a multi-GPU system.
     cudaStatus = cudaSetDevice(0);
@@ -95,11 +124,11 @@ cudaError_t addWithCuda(u32* out, u32 width, u32 height, const Camera& camera)
         goto Error;
     }
 
-    //cudaStatus = cudaMalloc((void**)&dev_a, size * sizeof(int));
-    //if (cudaStatus != cudaSuccess) {
-    //    fprintf(stderr, "cudaMalloc failed!");
-    //    goto Error;
-    //}
+    cudaStatus = cudaMalloc((void**)&dev_spheres, sphere_count * sizeof(Sphere));
+    if (cudaStatus != cudaSuccess) {
+       fprintf(stderr, "cudaMalloc failed!");
+       goto Error;
+    }
 
     //cudaStatus = cudaMalloc((void**)&dev_b, size * sizeof(int));
     //if (cudaStatus != cudaSuccess) {
@@ -114,6 +143,13 @@ cudaError_t addWithCuda(u32* out, u32 width, u32 height, const Camera& camera)
     //    goto Error;
     //}
 
+    // Copy spheres array from host memory to GPU buffers.
+    cudaStatus = cudaMemcpy(dev_spheres, &scene.Spheres.front(), sphere_count * sizeof(Sphere), cudaMemcpyHostToDevice);
+    if (cudaStatus != cudaSuccess) {
+       fprintf(stderr, "cudaMemcpy failed!");
+       goto Error;
+    }
+
     // Launch a kernel on the GPU with one thread for each element.
     int blockSize = 1024;
     int numBlocks = (problem_size + blockSize - 1) / blockSize;
@@ -126,7 +162,7 @@ cudaError_t addWithCuda(u32* out, u32 width, u32 height, const Camera& camera)
     auto inverseProjection = camera.GetInverseProjection();
     auto inverseView = camera.GetInverseView();
     auto cameraPos = camera.GetPosition();
-    renderKernel << <blocks, threads>> > (dev_c, width, height, cameraPos, inverseProjection, inverseView);
+    renderKernel << <blocks, threads>> > (dev_c, dev_spheres, sphere_count, width, height, cameraPos, inverseProjection, inverseView);
 
     // Check for any errors launching the kernel
     cudaStatus = cudaGetLastError();

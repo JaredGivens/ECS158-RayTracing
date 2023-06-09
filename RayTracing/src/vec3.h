@@ -8,17 +8,23 @@
 #include "glm/glm.hpp"
 
 using glm::vec3;
+using glm::vec4;
 
 class Color {
 private:     
     __device__ float clamp(float value, float lower, float upper) {
-        float result = value;
         if (lower > value) return lower;
         else if (upper < value) return upper;
         else return value;
     }
 public:
     __device__ Color(float r, float g, float b, float a) {
+        this->r = r;
+        this->g = g;
+        this->b = b;
+        this->a = a;
+    }
+    __device__ Color(float r, float g, float b, float a, bool _unused) {
         this->r = r;
         this->g = g;
         this->b = b;
