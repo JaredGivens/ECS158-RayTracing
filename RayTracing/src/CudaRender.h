@@ -7,13 +7,39 @@
 #include "Ray.h"
 #include "Scene.h"
 
+typedef uint32_t u32;
+
+class CudaRenderInfo {
+public:
+	const Sphere* spheres;
+	u32 sphere_count;
+	u32 width;
+	u32 height;
+	vec3 cameraPosition;
+	glm::mat4 inverseProjection;
+	glm::mat4 inverseView;
+};
+
 class CudaRender
 {
 public:
 	CudaRender() = default;
 	static void Render(uint32_t width, uint32_t height, uint32_t* shared_image_data, const Scene& scene, const Camera& camera);
-	__device__ static Color TraceRay(const Sphere* spheres, uint32_t sphere_count, const Ray& ray);
+	//__device__ static Color TraceRay(const Sphere* spheres, uint32_t sphere_count, const Ray& ray);
+	__device__ static Color CudaRender::PerPixel(uint32_t x, uint32_t y, const CudaRenderInfo& renderinfo);
 
-public:
-	//uint32_t* shared_image_data = nullptr;
+private: 
+	struct HitPayload
+	{
+		float HitDistance;
+		glm::vec3 WorldPosition;
+		glm::vec3 WorldNormal;
+
+		int ObjectIndex;
+	};
+
+	__device__ static HitPayload TraceRay(const Ray& ray, const CudaRenderInfo& renderinfo);
+	__device__ static HitPayload ClosestHit(const Ray& ray, float hitDistance, int objectIndex, const CudaRenderInfo& renderinfo);
+	__device__ static HitPayload Miss(const Ray& ray, const CudaRenderInfo& renderinfo);
+	public:
 };
