@@ -5,7 +5,8 @@
 
 const __device__ float CudaRenderInfo::Float() const
 {
-    return (float)curand_uniform(curandState) / (float)RAND_MAX;
+        float rand =  (float)curand_uniform(curandState);
+        return rand;
 }
 
 const __device__ glm::vec3 CudaRenderInfo::randVec3() const
@@ -18,16 +19,14 @@ const __device__ glm::vec3 CudaRenderInfo::randVec3(float min, float max) const
     return glm::vec3(Float() * (max - min) + min, Float() * (max - min) + min, Float() * (max - min) + min);
 }
 
-__global__ void renderKernel(u32* device_image_data, Sphere* spheres, u32 sphere_count, Material* materials, u32 materials_count, u32 width, u32 height, vec3 cameraPosition, glm::mat4 inverseProjection, glm::mat4 inverseView) {
-
-
+__global__ void renderKernel(u32* device_image_data, Sphere* spheres, u32 sphere_count, Material* materials, u32 materials_count, u32 width, u32 height, vec3 cameraPosition, glm::mat4 inverseProjection, glm::mat4 inverseView, vec3 skycolor) {
     //printf("From cuda code\n");
     u32 x = threadIdx.x + blockIdx.x * blockDim.x;
     u32 y = threadIdx.y + blockIdx.y * blockDim.y;
-    
+
     //rand
     curandState state;
-    curand_init(x, 912839, 0, &state);
+    curand_init(clock64() * x * height + y, 912839, 0, &state);
     
     if ((x >= width) || (y>= height)) return;
     CudaRenderInfo cudaRenderInfo;
@@ -41,6 +40,7 @@ __global__ void renderKernel(u32* device_image_data, Sphere* spheres, u32 sphere
     cudaRenderInfo.inverseProjection = inverseProjection;
     cudaRenderInfo.inverseView = inverseView;
     cudaRenderInfo.curandState = &state;
+    cudaRenderInfo.skycolor = skycolor;
 
     //debug code
     //if (x != 0 || y != 0) return;
@@ -82,27 +82,29 @@ __device__ Color CudaRender::PerPixel(uint32_t x, uint32_t y, const CudaRenderIn
 		CudaRender::HitPayload payload = CudaRender::TraceRay(ray, renderInfo);
 		if (payload.HitDistance < 0.0f)
 		{
-			glm::vec3 skyColor = glm::vec3(0.6f, 0.7f, 0.9f);
+			glm::vec3 skyColor = renderInfo.skycolor;
 			color += skyColor * multiplier;
 			break;
 		}
 
-		glm::vec3 lightDir = glm::normalize(glm::vec3(-1, -1, -1));
-		float lightIntensity = glm::max(glm::dot(payload.WorldNormal, -lightDir), 0.0f); // == cos(angle)
-
-
 		const Sphere& sphere = renderInfo.spheres[payload.ObjectIndex];
 		const Material& material = renderInfo.materials[sphere.MaterialIndex];
+
+		glm::vec3 lightDir = glm::normalize(glm::vec3(-1, -1, -1));
+        glm::vec3 halfway = -glm::normalize(lightDir + ray.Direction);
+		float lightIntensity = glm::max(glm::dot(payload.WorldNormal, -lightDir), 0.0f); // == cos(angle)
+        float specIntensity = glm::pow(lightIntensity, 4.0f);
+        lightIntensity += specIntensity * (1.0f - material.Roughness);
 
 		glm::vec3 sphereColor = material.Albedo;
 		sphereColor *= lightIntensity;
 		color += sphereColor * multiplier;
 
-		multiplier *= 0.5f;
+		multiplier *= 0.5f * material.Metallic;
 
 		ray.Origin = payload.WorldPosition + payload.WorldNormal * 0.0001f;
-		ray.Direction = glm::reflect(ray.Direction,
-			payload.WorldNormal + material.Roughness * renderInfo.randVec3(-0.5f, 0.5f));
+        glm::vec3 scatNorm = glm::normalize(payload.WorldNormal + material.Roughness * renderInfo.randVec3(-0.5f, 0.5f));
+		ray.Direction = glm::reflect(ray.Direction, scatNorm);
 	}
 
     return Color(color.r, color.g, color.b, 1.f, 0);
@@ -191,8 +193,6 @@ cudaError_t addWithCuda(u32* out, u32 width, u32 height, const Scene& scene, con
     u32 materials_count = scene.Materials.size();
     cudaError_t cudaStatus;
 
-    std::cout << "Sphere count: " << sphere_count << std::endl;
-
     // Choose which GPU to run on, change this on a multi-GPU system.
     cudaStatus = cudaSetDevice(0);
     if (cudaStatus != cudaSuccess) {
@@ -249,7 +249,6 @@ cudaError_t addWithCuda(u32* out, u32 width, u32 height, const Scene& scene, con
     // Launch a kernel on the GPU with one thread for each element.
     int blockSize = 1024;
     int numBlocks = (problem_size + blockSize - 1) / blockSize;
-    printf("Num blocks: %d\n", numBlocks);
     int tx = 8;
     int ty = 8;
     // Render our buffer
@@ -258,7 +257,7 @@ cudaError_t addWithCuda(u32* out, u32 width, u32 height, const Scene& scene, con
     auto inverseProjection = camera.GetInverseProjection();
     auto inverseView = camera.GetInverseView();
     auto cameraPos = camera.GetPosition();
-    renderKernel << <blocks, threads>> > (dev_c, dev_spheres, sphere_count, dev_materials, materials_count, width, height, cameraPos, inverseProjection, inverseView);
+    renderKernel <<<blocks, threads>>> (dev_c, dev_spheres, sphere_count, dev_materials, materials_count, width, height, cameraPos, inverseProjection, inverseView, scene.skycolor);
 
     // Check for any errors launching the kernel
     cudaStatus = cudaGetLastError();

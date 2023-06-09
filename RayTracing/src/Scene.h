@@ -21,6 +21,7 @@ struct Sphere
 
 struct Scene
 {
+	glm::vec3 skycolor = glm::vec3(0.2f, 0.2f, 0.2f);
 	std::vector<Sphere> Spheres;
     std::vector<Material> Materials;
 };

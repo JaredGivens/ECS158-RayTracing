@@ -29,6 +29,7 @@ public:
 	glm::mat4 inverseProjection;
 	glm::mat4 inverseView;
 	curandState* curandState;
+	vec3 skycolor;
 };
 
 class CudaRender

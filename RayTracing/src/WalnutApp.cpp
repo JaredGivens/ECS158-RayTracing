@@ -12,6 +12,10 @@
 
 using namespace Walnut;
 
+float Float() {
+	return Walnut::Random::Float();
+}
+
 class ExampleLayer : public Walnut::Layer
 {
 public:
@@ -19,26 +23,20 @@ public:
 		: m_Camera(45.0f, 0.1f, 100.0f)
 	{
 		Material& pinkSphere = m_Scene.Materials.emplace_back();
-		pinkSphere.Albedo = { 1.0f, 0.0f, 1.0f };
+		pinkSphere.Albedo = { .733f, 0.6196f, 0.7333f };
+		pinkSphere.Metallic = 1.f;
 		pinkSphere.Roughness = 0.0f;
 
 		Material& blueSphere = m_Scene.Materials.emplace_back();
-		blueSphere.Albedo = { 0.2f, 0.3f, 1.0f };
-		blueSphere.Roughness = 0.1f;
+		blueSphere.Albedo = { 0.2941f, .4196f, 0.8078f };
+		blueSphere.Roughness = 0.0f;
+		blueSphere.Metallic = 1.0f;
 
-		{
+		for (int i = 0; i < 100; i++) {
 			Sphere sphere;
-			sphere.Position = { 0.0f, 0.0f, 0.0f };
-			sphere.Radius = 1.0f;
-			sphere.MaterialIndex = 0;
-			m_Scene.Spheres.push_back(sphere);
-		}
-
-		{
-			Sphere sphere;
-			sphere.Position = { 0.0f, -101.0f, 0.0f };
-			sphere.Radius = 100.0f;
-			sphere.MaterialIndex = 1;
+			sphere.Position = { Float() * 12 - 6, Float() * 10 - 5.5, Float() * 10 - 20 };
+			sphere.Radius = Float() + .1f;
+			sphere.MaterialIndex = (uint32_t)(Float() * m_Scene.Materials.size());
 			m_Scene.Spheres.push_back(sphere);
 		}
 	}
@@ -100,8 +98,11 @@ public:
 
 		ImGui::End();
 		ImGui::PopStyleVar();
-
-		Render();
+		//framecount += 1;
+		//if (framecount < 10) {
+		//	Render();
+		//}
+		 Render();
 	}
 
 	void Render()
@@ -118,7 +119,8 @@ private:
 	Camera m_Camera;
 	Scene m_Scene;
 	uint32_t m_ViewportWidth = 0, m_ViewportHeight = 0;
-
+	u32 framecount = 0;
+	u32 total_frame_time = 0;
 	float m_LastRenderTime = 0.0f;
 };
 
