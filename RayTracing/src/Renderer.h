@@ -16,7 +16,7 @@ class Renderer
 public:
 	struct Settings
 	{
-		bool Accumulate = true;
+		bool Accumulate = false;
 	};
 public:
 	Renderer() = default;

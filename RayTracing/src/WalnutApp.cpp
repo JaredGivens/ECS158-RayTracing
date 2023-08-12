@@ -19,6 +19,7 @@ float Float() {
 class ExampleLayer : public Walnut::Layer
 {
 public:
+#if 1
 	ExampleLayer()
 		: m_Camera(45.0f, 0.1f, 100.0f)
 	{
@@ -40,32 +41,34 @@ public:
 			m_Scene.Spheres.push_back(sphere);
 		}
 	}
-	//ExampleLayer()
-	//	: m_Camera(45.0f, 0.1f, 100.0f)
-	//{
-	//	Material& pinkSphere = m_Scene.Materials.emplace_back();
-	//	pinkSphere.Albedo = { 1.0f, 0.0f, 1.0f };
-	//	pinkSphere.Roughness = 0.0f;
-	//	pinkSphere.Metallic = 1.0f;
-	//	Material& blueSphere = m_Scene.Materials.emplace_back();
-	//	blueSphere.Albedo = { 0.2f, 0.3f, 1.0f };
-	//	blueSphere.Roughness = 0.0f;
-	//	blueSphere.Metallic = 1.0f;
-	//	{
-	//		Sphere sphere;
-	//		sphere.Position = { 0.0f, 0.0f, 0.0f };
-	//		sphere.Radius = 1.0f;
-	//		sphere.MaterialIndex = 0;
-	//		m_Scene.Spheres.push_back(sphere);
-	//	}
-	//	{
-	//		Sphere sphere;
-	//		sphere.Position = { 0.0f, -101.0f, 0.0f };
-	//		sphere.Radius = 100.0f;
-	//		sphere.MaterialIndex = 1;
-	//		m_Scene.Spheres.push_back(sphere);
-	//	}
-	//}
+#else
+	ExampleLayer()
+		: m_Camera(45.0f, 0.1f, 100.0f)
+	{
+		Material& pinkSphere = m_Scene.Materials.emplace_back();
+		pinkSphere.Albedo = { 1.0f, 0.0f, 1.0f };
+		pinkSphere.Roughness = 0.0f;
+		pinkSphere.Metallic = 1.0f;
+		Material& blueSphere = m_Scene.Materials.emplace_back();
+		blueSphere.Albedo = { 0.2f, 0.3f, 1.0f };
+		blueSphere.Roughness = 0.0f;
+		blueSphere.Metallic = 1.0f;
+		{
+			Sphere sphere;
+			sphere.Position = { 0.0f, 0.0f, 0.0f };
+			sphere.Radius = 1.0f;
+			sphere.MaterialIndex = 0;
+			m_Scene.Spheres.push_back(sphere);
+		}
+		{
+			Sphere sphere;
+			sphere.Position = { 0.0f, -101.0f, 0.0f };
+			sphere.Radius = 100.0f;
+			sphere.MaterialIndex = 1;
+			m_Scene.Spheres.push_back(sphere);
+		}
+	}
+#endif
 
 	virtual void OnUpdate(float ts) override
 	{
@@ -80,8 +83,10 @@ public:
 		{
 			Render();
 		}
+		ImGui::ColorEdit3("Skycolor", glm::value_ptr(m_Scene.skycolor));
 
 		ImGui::Checkbox("Accumulate", &m_Renderer.GetSettings().Accumulate);
+		ImGui::Checkbox("Realtime", &render_realtime);
 
 		if (ImGui::Button("Reset"))
 			m_Renderer.ResetFrameIndex();
@@ -95,7 +100,8 @@ public:
 
 			Sphere& sphere = m_Scene.Spheres[i];
 			ImGui::DragFloat3("Position", glm::value_ptr(sphere.Position), 0.1f);
-			ImGui::DragInt("Material", &sphere.MaterialIndex, 1.0f, 0, (int)m_Scene.Materials.size() - 1);
+			ImGui::DragInt("Material", &sphere.MaterialIndex, 1.0f, 0, 
+			(int)m_Scene.Materials.size() - 1);
 
 			ImGui::Separator();
 
@@ -126,7 +132,8 @@ public:
 
 		auto image = m_Renderer.GetFinalImage();
 		if (image)
-			ImGui::Image(image->GetDescriptorSet(), { (float)image->GetWidth(), (float)image->GetHeight() },
+			ImGui::Image(image->GetDescriptorSet(),
+			 { (float)image->GetWidth(), (float)image->GetHeight() },
 				ImVec2(0, 1), ImVec2(1, 0));
 
 		ImGui::End();
@@ -135,7 +142,9 @@ public:
 		//if (framecount < 10) {
 		//	Render();
 		//}
-		 Render();
+		if (render_realtime) {
+			Render();
+		}
 	}
 
 	void Render()
@@ -155,6 +164,8 @@ private:
 	u32 framecount = 0;
 	u32 total_frame_time = 0;
 	float m_LastRenderTime = 0.0f;
+
+	bool render_realtime = true;
 };
 
 Walnut::Application* Walnut::CreateApplication(int argc, char** argv)

@@ -36,8 +36,8 @@ class CudaRender
 {
 public:
 	CudaRender() = default;
-	static cudaError Render(u32 width, u32 height, u32* shared_image_data, vec4* accumulation, const Scene& scene, const Camera& camera);
-	//__device__ static Color TraceRay(const Sphere* spheres, u32 sphere_count, const Ray& ray);
+	static cudaError Render(u32 width, u32 height, u32* shared_image_data,
+	 		vec4* accumulation, const Scene& scene, const Camera& camera);
 	__device__ static Color CudaRender::PerPixel(u32 x, u32 y, const CudaRenderInfo& renderinfo);
 
 private: 
@@ -51,7 +51,7 @@ private:
 	};
 
 	__device__ static HitPayload TraceRay(const Ray& ray, const CudaRenderInfo& renderinfo);
-	__device__ static HitPayload ClosestHit(const Ray& ray, float hitDistance, int objectIndex, const CudaRenderInfo& renderinfo);
+	__device__ static HitPayload ClosestHit(const Ray& ray, float hitDistance, 
+			int objectIndex, const CudaRenderInfo& renderinfo);
 	__device__ static HitPayload Miss(const Ray& ray, const CudaRenderInfo& renderinfo);
-	public:
 };

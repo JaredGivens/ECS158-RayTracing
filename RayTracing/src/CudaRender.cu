@@ -22,11 +22,18 @@ const __device__ glm::vec3 CudaRenderInfo::randVec3() const
 
 const __device__ glm::vec3 CudaRenderInfo::randVec3(float min, float max) const
 {
-    return glm::vec3(Float() * (max - min) + min, Float() * (max - min) + min, Float() * (max - min) + min);
+    return glm::vec3(Float() * (max - min) + min,
+     Float() * (max - min) + min,
+     Float() * (max - min) + min);
 }
 
-__global__ void raytraceKernel(u32* device_image_data, vec4* dev_accumulation, Sphere* spheres, u32 sphere_count, Material* materials, u32 materials_count, u32 width, u32 height, vec3 cameraPosition, glm::mat4 inverseProjection, glm::mat4 inverseView, vec3 skycolor, u32 frameindex) {
-    //printf("From cuda code\n");
+__global__ void raytraceKernel(u32* device_image_data, vec4* dev_accumulation, 
+        Sphere* spheres, u32 sphere_count,
+        Material* materials, u32 materials_count,
+        u32 width, u32 height,
+        vec3 cameraPosition, glm::mat4 inverseProjection,
+        glm::mat4 inverseView, vec3 skycolor, u32 frameindex) {
+
     u32 x = threadIdx.x + blockIdx.x * blockDim.x;
     u32 y = threadIdx.y + blockIdx.y * blockDim.y;
     u32 fb_index = x + y * width; //index in framebuffer/accumulation buffer
@@ -48,19 +55,8 @@ __global__ void raytraceKernel(u32* device_image_data, vec4* dev_accumulation, S
     cudaRenderInfo.curandState = &state;
     cudaRenderInfo.skycolor = skycolor;
 
-    //debug code
-
-    //auto sphereColor = spheres[0].Albedo;
-    //printf("Albedo1: r%f g%f b%f a%f\n", sphereColor.r, sphereColor.g, sphereColor.b, 1.0f);
-    //sphereColor = spheres[1].Albedo;
-    //printf("Albedo0: r%f g%f b%f a%f\n", sphereColor.r, sphereColor.g, sphereColor.b, 1.0f);
-
     Color color = CudaRender::PerPixel(x, y, cudaRenderInfo);
-    //if (x == 0 && y == 0) {
-    //    printf("frameindex: %d, prev accdata: %x\n", frameindex, Color{dev_accumulation[fb_index]}.ConvertToRGBA());
-    //}
 
-    //printf("frameindex: %d", frameindex);
     //reset accumlation if frameindex == 1;
     if(frameindex == 1)
     {
@@ -83,7 +79,8 @@ __device__ Color CudaRender::PerPixel(uint32_t x, uint32_t y, const CudaRenderIn
     glm::vec2 coord = { (float)x / (float)renderInfo.width, (float)y / (float)renderInfo.height };
     coord = coord * 2.0f - 1.0f; // -1 -> 1
     glm::vec4 target = renderInfo.inverseProjection * glm::vec4(coord.x, coord.y, 1, 1);
-    glm::vec3 rayDirection = glm::vec3(renderInfo.inverseView * glm::vec4(glm::normalize(glm::vec3(target) / target.w), 0)); // World space
+    glm::vec3 rayDirection = glm::vec3(renderInfo.inverseView * glm::vec4(
+        glm::normalize(glm::vec3(target) / target.w), 0)); // World space
 
     Ray ray; 
     ray.Origin = renderInfo.cameraPosition;
@@ -108,7 +105,8 @@ __device__ Color CudaRender::PerPixel(uint32_t x, uint32_t y, const CudaRenderIn
 
 		glm::vec3 lightDir = glm::normalize(glm::vec3(-1, -1, -1));
         glm::vec3 halfway = -glm::normalize(lightDir + ray.Direction);
-		float lightIntensity = glm::max(glm::dot(payload.WorldNormal, -lightDir), 0.0f); // == cos(angle)
+		float lightIntensity = glm::max(glm::dot(payload.WorldNormal,
+            lightDir), 0.0f); // == cos(angle)
         float specIntensity = glm::pow(lightIntensity, 4.0f);
         lightIntensity += specIntensity * (1.0f - material.Roughness);
 
@@ -119,14 +117,16 @@ __device__ Color CudaRender::PerPixel(uint32_t x, uint32_t y, const CudaRenderIn
 		multiplier *= 0.5f * material.Metallic;
 
 		ray.Origin = payload.WorldPosition + payload.WorldNormal * 0.0001f;
-        glm::vec3 scatNorm = glm::normalize(payload.WorldNormal + material.Roughness * renderInfo.randVec3(-0.5f, 0.5f));
+        glm::vec3 scatNorm = glm::normalize(payload.WorldNormal + material.Roughness *
+            renderInfo.randVec3(-0.5f, 0.5f));
 		ray.Direction = glm::reflect(ray.Direction, scatNorm);
 	}
 
     return Color(color.r, color.g, color.b, 1.f, 0);
 
 }
-__device__ CudaRender::HitPayload CudaRender::TraceRay(const Ray& ray, const CudaRenderInfo& renderInfo)
+__device__ CudaRender::HitPayload CudaRender::TraceRay(const Ray& ray,
+    const CudaRenderInfo& renderInfo)
 {
     const Sphere* spheres = renderInfo.spheres;
     u32 sphere_count = renderInfo.sphere_count;
@@ -159,7 +159,8 @@ __device__ CudaRender::HitPayload CudaRender::TraceRay(const Ray& ray, const Cud
 		// Quadratic formula:
 		// (-b +- sqrt(discriminant)) / 2a
 
-		// float t0 = (-b + glm::sqrt(discriminant)) / (2.0f * a); // Second hit distance (currently unused)
+        // Second hit distance (currently unused)
+		// float t0 = (-b + glm::sqrt(discriminant)) / (2.0f * a); 
 		float closestT = (-b - glm::sqrt(discriminant)) / (2.0f * a);
         if (closestT > 0.0f && closestT < hitDistance)
         {
@@ -174,7 +175,8 @@ __device__ CudaRender::HitPayload CudaRender::TraceRay(const Ray& ray, const Cud
     return ClosestHit(ray, hitDistance, closestSphere, renderInfo);
 }
 
-CudaRender::HitPayload CudaRender::ClosestHit(const Ray& ray, float hitDistance, int objectIndex, const CudaRenderInfo& renderInfo)
+CudaRender::HitPayload CudaRender::ClosestHit(const Ray& ray, float hitDistance,
+    int objectIndex, const CudaRenderInfo& renderInfo)
 {
 	CudaRender::HitPayload payload;
 	payload.HitDistance = hitDistance;
@@ -199,7 +201,9 @@ CudaRender::HitPayload CudaRender::Miss(const Ray& ray, const CudaRenderInfo& re
 }
 
 //writes to out array using cuda
-cudaError CudaRender::Render(u32 width, u32 height, u32* host_image_data, vec4* host_accumulation, const Scene& scene, const Camera& camera) {
+cudaError CudaRender::Render(u32 width, u32 height, u32* host_image_data,
+    vec4* host_accumulation, const Scene& scene, const Camera& camera) {
+
     u32 pixel_count = width * height;
     Sphere* dev_spheres = nullptr;
     Material* dev_materials = nullptr;
@@ -252,33 +256,17 @@ cudaError CudaRender::Render(u32 width, u32 height, u32* host_image_data, vec4* 
        goto Error;
     }
 
-    //cudaStatus = cudaMalloc((void**)&dev_b, size * sizeof(int));
-    //if (cudaStatus != cudaSuccess) {
-    //    fprintf(stderr, "cudaMalloc failed!");
-    //    goto Error;
-    //}
-
-    //// Copy input vectors from host memory to GPU buffers.
-    //cudaStatus = cudaMemcpy(dev_a, a, size * sizeof(int), cudaMemcpyHostToDevice);
-    //if (cudaStatus != cudaSuccess) {
-    //    fprintf(stderr, "cudaMemcpy failed!");
-    //    goto Error;
-    //}
-
     // Copy spheres array from host memory to GPU buffers.
-    cudaStatus = cudaMemcpy(dev_spheres, &scene.Spheres.front(), sphere_count * sizeof(Sphere), cudaMemcpyHostToDevice);
+    cudaStatus = cudaMemcpy(dev_spheres, &scene.Spheres.front(),
+        sphere_count * sizeof(Sphere), cudaMemcpyHostToDevice);
     if (cudaStatus != cudaSuccess) {
        fprintf(stderr, "cudaMemcpy (scene.Spheres) failed!");
        goto Error;
     }
-    // cudaStatus = cudaMemcpy(dev_accumulation, host_accumulation, pixel_count * sizeof(vec4), cudaMemcpyHostToDevice);
-    // if (cudaStatus != cudaSuccess) {
-    //    fprintf(stderr, "cudaMemcpy (accumulation) failed!");
-    //    goto Error;
-    // }
-    
+
     //copy materials array to gpu buffers
-    cudaStatus = cudaMemcpy(dev_materials, &scene.Materials.front(), materials_count * sizeof(Material), cudaMemcpyHostToDevice);
+    cudaStatus = cudaMemcpy(dev_materials, &scene.Materials.front(), 
+        materials_count * sizeof(Material), cudaMemcpyHostToDevice);
     if (cudaStatus != cudaSuccess) {
        fprintf(stderr, "cudaMemcpy failed!");
        goto Error;
@@ -295,7 +283,10 @@ cudaError CudaRender::Render(u32 width, u32 height, u32* host_image_data, vec4* 
     auto inverseProjection = camera.GetInverseProjection();
     auto inverseView = camera.GetInverseView();
     auto cameraPos = camera.GetPosition();
-    raytraceKernel <<<blocks, threads>>> (dev_framebuffer, dev_accumulation, dev_spheres, sphere_count, dev_materials, materials_count, width, height, cameraPos, inverseProjection, inverseView, scene.skycolor, scene.frameindex);
+
+    raytraceKernel <<<blocks, threads>>> (dev_framebuffer, dev_accumulation,
+     dev_spheres, sphere_count, dev_materials, materials_count, width, height, 
+     cameraPos, inverseProjection, inverseView, scene.skycolor, scene.frameindex);
 
     // Check for any errors launching the kernel
     cudaStatus = cudaGetLastError();
@@ -318,11 +309,6 @@ cudaError CudaRender::Render(u32 width, u32 height, u32* host_image_data, vec4* 
         fprintf(stderr, "cudaMemcpy failed!");
         goto Error;
     }
-    // cudaStatus = cudaMemcpy(host_accumulation, dev_accumulation, pixel_count * sizeof(vec4), cudaMemcpyDeviceToHost);
-    // if (cudaStatus != cudaSuccess) {
-    //     fprintf(stderr, "cudaMemcpy failed!");
-    //     goto Error;
-    // }
 
 Error:
     cudaFree(dev_spheres);
